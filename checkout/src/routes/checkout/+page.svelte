@@ -1,5 +1,13 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import CircleCheck from '$lib/assets/icons/circleCheck.svelte';
+	import Error from '$lib/assets/icons/error.svelte';
+	import { browser } from '$app/environment';
+	import { onMount } from 'svelte';
+	import QrCode from 'svelte-qrcode';
+	import PhonepeIcon from '$lib/assets/icons/phonepe-icon.svelte';
+	import GooglePay from '$lib/assets/icons/google-pay-icon.svelte';
+	import PaytmLogo from '$lib/assets/icons/paytm-logo.svelte';
 
 	type Response = {
 		txn_id: string;
@@ -16,11 +24,37 @@
 	let isProcessing = $state(false);
 	let paymentSuccess = $state(false);
 	let selectedMethod = $state('card');
+	let upiId = $state('');
+	let upiError = $state('');
+	let isValidating = $state(false);
+	let isUpiIdValid = $state(false);
+	let touched = $state(false);
+	let debounceTimer: ReturnType<typeof setTimeout>;
+	let selectedUpiApp = $state('');
+	let isMobile = $state(false);
+	let qrCodeUrl = $state('');
+	let openQR = $state(false);
+
+	onMount(() => {
+		if (browser) {
+			isMobile = window.innerWidth <= 768;
+
+			qrCodeUrl = 'https://github.com/';
+
+			const handleResize = () => {
+				isMobile = window.innerWidth <= 768;
+			};
+			window.addEventListener('resize', handleResize);
+			return () => window.removeEventListener('resize', handleResize);
+		}
+	});
+
+	const gst = $derived(session ? session?.amount * 0.18 : 0);
+	const totalAmount = $derived(session ? session?.amount + gst : 0);
 
 	function simulatePay() {
 		isProcessing = true;
 
-		// Simulate payment processing delay
 		setTimeout(() => {
 			isProcessing = false;
 			paymentSuccess = true;
@@ -33,6 +67,189 @@
 				}
 			}, 1500);
 		}, 2000);
+	}
+
+	async function validateUPI(value: string) {
+		isValidating = true;
+		try {
+			const response = await fetch('/api/checkout', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ vpa: upiId })
+			});
+
+			const validation = await response.json();
+			if (validation.success) {
+				upiError = validation.message;
+				isUpiIdValid = true;
+			} else {
+				upiError = validation.message;
+				isUpiIdValid = false;
+			}
+		} catch (error) {
+			upiError = 'Error verifying UPI ID';
+			isUpiIdValid = false;
+		} finally {
+			isValidating = false;
+		}
+	}
+
+	const upiApps = [
+		{ id: 'googlepay', name: 'Google Pay', icon: GooglePay },
+		{ id: 'phonepe', name: 'PhonePe', icon: PhonepeIcon },
+		{ id: 'paytm', name: 'Paytm', icon: PaytmLogo }
+	];
+
+	function handleInput(event: Event) {
+		const target = event.target as HTMLInputElement;
+		const upi = target.value;
+		touched = true;
+		isUpiIdValid = false;
+
+		clearTimeout(debounceTimer);
+
+		upiError = '';
+		isValidating = false;
+
+		// If empty, don't validate
+		if (!upi.trim()) {
+			return;
+		}
+
+		// Set new timer - validate after 2 seconds of inactivity
+		debounceTimer = setTimeout(() => {
+			validateUPI(upi);
+		}, 2000);
+	}
+
+	function parseUPITimestamp(ts: string | null) {
+		if (!ts) return null;
+		return new Date(
+			Number(ts.slice(0, 4)), // year
+			Number(ts.slice(4, 6)) - 1, // month (0-based)
+			Number(ts.slice(6, 8)), // day
+			Number(ts.slice(8, 10)), // hour
+			Number(ts.slice(10, 12)), // minute
+			Number(ts.slice(12, 14)) // second
+		);
+	}
+
+	let timeLeft = $state(0);
+	let timer: ReturnType<typeof setInterval> | null = $state(null);
+
+	function extractQRTime(upiUrl: string) {
+		timer && clearInterval(timer);
+
+		const params = new URLSearchParams(upiUrl.split('?')[1]);
+		const endTs = params.get('QRexpire');
+
+		const endTime = parseUPITimestamp(endTs);
+		if (!endTime) return;
+
+		const update = () => {
+			const diff = Math.floor((endTime.getTime() - Date.now()) / 1000);
+			timeLeft = Math.max(diff, 0);
+
+			if (timeLeft === 0) {
+				timer && clearInterval(timer);
+				extractQRTime(qrCodeUrl);
+			}
+		};
+
+		update(); // run immediately
+		timer = setInterval(update, 1000);
+	}
+
+	function formatMMSS(seconds: number) {
+		const m = Math.floor(seconds / 60);
+		const s = seconds % 60;
+		return `${m}.${s.toString().padStart(2, '0')}`;
+	}
+
+	async function getIntentUrl() {
+		const qrRequestData = {
+			orgId: 10024,
+			customerPhoneNumber: '7338798415',
+			transactionAmount: totalAmount.toString(),
+			currency: 'INR',
+			mode: 'DYNAMIC_SECURE_QR',
+			orderId: '57613687',
+			callbackUrl: session?.callback_url,
+			checkoutId: 'checkout-id-01',
+			clientDescription: 'first intent test',
+			source: 'WEB'
+		};
+
+		try {
+			const response = await fetch('/api/upi-intent', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(qrRequestData)
+			});
+
+			const qrResponse = await response.json();
+			return qrResponse;
+		} catch (error) {
+			//    openQR = false
+		} finally {
+			//    openQR = false
+		}
+	}
+
+	async function generateQR() {
+		const response = await getIntentUrl();
+		console.log(response);
+
+		if (response.success) {
+			const upiString = response.data.intentUrl;
+			openQR = true;
+			//   const upiString="upi://pay?QRexpire=20260120152947&QRts=20260120133650&am=360&cu=INR&mc=m1&mid=m01&mode=15&orgid=gateway-01&pa=merchant%40upi&pn=merchant&qrMedium=06&sign=&tn=first+intent+test&tr=136533449992429568&ver=01";
+			qrCodeUrl = upiString;
+			extractQRTime(upiString);
+		} else {
+			openQR = false;
+		}
+	}
+
+	// const upiAppLinks:Record<string,string> = {
+	// // svelte-ignore state_referenced_locally
+	// googlepay: `Intent;scheme=upi;package=com.google.android.apps.nbu.paisa.user;end`,
+	// // svelte-ignore state_referenced_locally
+	// phonepe: `phonepe://pay?pa=merchant@paytm&pn=Flipopay&am=${totalAmount}&cu=INR`,
+	// // svelte-ignore state_referenced_locally
+	// paytm: `paytmmp://pay?pa=merchant@paytm&pn=Flipopay&am=${totalAmount}&cu=INR`
+	// };
+
+	async function handleUpiAppClick(appId: string) {
+		const response = await getIntentUrl();
+		console.log(response);
+		if (response?.success) {
+			const upiString = response.data.intentUrl;
+			selectedUpiApp = appId;
+
+			let intentUrl = '';
+
+			switch (appId) {
+				case 'googlepay':
+					intentUrl = `intent://pay?${upiString.split('?')[1]}#Intent;scheme=upi;package=com.google.android.apps.nbu.paisa.user;end`;
+					break;
+
+				case 'phonepe':
+					intentUrl = `intent://pay?${upiString.split('?')[1]}#Intent;scheme=upi;package=com.phonepe.app;end`;
+					break;
+
+				case 'paytm':
+					intentUrl = `intent://pay?${upiString.split('?')[1]}#Intent;scheme=upi;package=net.one97.paytm;end`;
+					break;
+
+				default:
+					intentUrl = upiString;
+			}
+
+			window.location.href = intentUrl;
+		} else {
+			// openQR = false
+		}
 	}
 </script>
 
@@ -168,35 +385,129 @@
 						{#if selectedMethod === 'upi'}
 							<div class="space-y-4">
 								<div class="form-group">
-									<label for="upiId" class="form-label">UPI ID</label>
-									<input type="text" id="upiId" class="form-input" placeholder="yourname@upi" />
+									<label for="upiId" class="form-label">Pay with UPI ID</label>
+									<input
+										type="text"
+										id="upiId"
+										class="form-input mb-2"
+										placeholder="yourname@upi"
+										oninput={handleInput}
+										bind:value={upiId}
+									/>
+									{#if upiError !== ''}
+										<span
+											class=" flex gap-2 items-center text-xs {!isUpiIdValid
+												? 'text-red-500'
+												: 'text-green-500'}"
+										>
+											{#if !isUpiIdValid}
+												<Error width={'14'} height={'14'} />
+											{:else}
+												<CircleCheck width={'16'} height={'16'} stroke="#5bb98c" />
+											{/if}
+											{upiError}
+										</span>
+										{#if isUpiIdValid}
+											<p class="text-green-500 text-sm mt-2">
+												Please press pay to complete the payment
+											</p>
+										{/if}
+									{/if}
 								</div>
-								<div class="upi-apps">
-									<button class="upi-app">
+								{#if !isMobile}
+									<div>
+										<h3 class="text-sm font-semibold text-gray-700 mb-4">Scan QR code to pay</h3>
 										<div
-											class="w-12 h-12 bg-linear-to-br from-purple-500 to-purple-700 rounded-xl flex items-center justify-center text-white font-bold"
+											class=" relative flex flex-col items-center p-6 bg-linear-to-br from-indigo-50 to-purple-50 rounded-xl border border-indigo-100"
 										>
-											GP
+											<div
+												class="bg-white rounded-xl p-4 w-[180px] shadow-lg flex items-center justify-center"
+												class:blur-sm={!openQR}
+											>
+												<QrCode value={qrCodeUrl} size={160} />
+											</div>
+											{#if openQR}
+												{#if timeLeft === 0}
+													<p class="text-[16px] font-medium text-gray-600 text-center mt-4 mb-2">
+														QR code is expired!
+													</p>
+												{:else}
+													<p class="text-[16px] font-medium text-gray-600 text-center mt-4 mb-2">
+														QR code is valid for <span class="text-red-800"
+															>{formatMMSS(timeLeft)}</span
+														> minutes
+													</p>
+												{/if}
+											{/if}
+											<p class="text-sm text-gray-600 text-center mt-4 mb-2">
+												Scan with any UPI app
+											</p>
+											<div class="flex gap-2 items-center">
+												{#each upiApps as app}
+													<div
+														class="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold"
+														title={app.name}
+													>
+														<!-- {app.component || app.name.substring(0, 2).toUpperCase()} -->
+														<app.icon />
+													</div>
+												{/each}
+											</div>
+											{#if !openQR}
+												<div
+													class="absolute inset-0 bg-black/40 flex items-center justify-center rounded-lg"
+												>
+													<button
+														onclick={generateQR}
+														class="bg-white text-black px-4 py-2 rounded-md font-medium"
+													>
+														Pay via QR
+													</button>
+												</div>
+											{/if}
 										</div>
-										<span>Google Pay</span>
-									</button>
-									<button class="upi-app">
-										<div
-											class="w-12 h-12 bg-linear-to-br from-blue-500 to-blue-700 rounded-xl flex items-center justify-center text-white font-bold"
-										>
-											PP
+									</div>
+								{:else}
+									<div class="form-group">
+										<label for="upiId" class="form-label">Pay With UPI APPS</label>
+										<div class="upi-apps">
+											{#each upiApps as apps, index (index)}
+												<button class="upi-app" onclick={() => handleUpiAppClick('googlepay')}>
+													<div
+														class="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold"
+													>
+														<apps.icon />
+													</div>
+													<span>{apps.name}</span>
+												</button>
+											{/each}
+											<!-- <button class="upi-app" onclick={() => handleUpiAppClick('googlepay')}>
+												<div
+													class="w-12 h-12 bg-linear-to-br from-purple-500 to-purple-700 rounded-xl flex items-center justify-center text-white font-bold"
+												>
+													GP
+												</div>
+												<span>Google Pay</span>
+											</button>
+											<button class="upi-app" onclick={() => handleUpiAppClick('phonepe')}>
+												<div
+													class="w-12 h-12 bg-linear-to-br from-blue-500 to-blue-700 rounded-xl flex items-center justify-center text-white font-bold"
+												>
+													PP
+												</div>
+												<span>PhonePe</span>
+											</button>
+											<button class="upi-app" onclick={() => handleUpiAppClick('paytm')}>
+												<div
+													class="w-12 h-12 bg-linear-to-br from-indigo-500 to-indigo-700 rounded-xl flex items-center justify-center text-white font-bold"
+												>
+													PT
+												</div>
+												<span>Paytm</span>
+											</button> -->
 										</div>
-										<span>PhonePe</span>
-									</button>
-									<button class="upi-app">
-										<div
-											class="w-12 h-12 bg-linear-to-br from-indigo-500 to-indigo-700 rounded-xl flex items-center justify-center text-white font-bold"
-										>
-											PT
-										</div>
-										<span>Paytm</span>
-									</button>
-								</div>
+									</div>
+								{/if}
 							</div>
 						{/if}
 
@@ -265,7 +576,7 @@
 								? 'success'
 								: ''}"
 							onclick={simulatePay}
-							disabled={isProcessing || paymentSuccess}
+							disabled={isProcessing || paymentSuccess || !isUpiIdValid}
 						>
 							{#if paymentSuccess}
 								<svg
@@ -286,7 +597,7 @@
 								<div class="spinner"></div>
 								Processing...
 							{:else}
-								Pay ₹{session.amount.toLocaleString('en-IN')}
+								Pay ₹{totalAmount.toLocaleString('en-IN')}
 							{/if}
 						</button>
 
@@ -346,12 +657,7 @@
 						</div>
 
 						<div class="info-box">
-							<svg
-								class="w-5 h-5 flex-shrink-0"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-							>
+							<svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 								<path
 									stroke-linecap="round"
 									stroke-linejoin="round"
@@ -371,12 +677,7 @@
 						</div>
 
 						<div class="info-box mt-4">
-							<svg
-								class="w-5 h-5 flex-shrink-0"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-							>
+							<svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 								<path
 									stroke-linecap="round"
 									stroke-linejoin="round"

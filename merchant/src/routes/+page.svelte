@@ -5,16 +5,16 @@
 
 	function createPayment() {
 		const txnId = 'txn_' + Date.now();
-		const callbackUrl = encodeURIComponent('http://localhost:5175/callback');
+		const callbackUrl = encodeURIComponent('http://localhost:5173/callback');
 		const token = btoa(
 			JSON.stringify({
 				txn_id: txnId,
 				amount: 1000 * quantity,
-				callback_url: 'http://localhost:5174/callback'
+				callback_url: 'http://localhost:5173/callback'
 			})
 		);
 
-		const paymentUrl = `http://localhost:5173/checkout?token=${token}`;
+		const paymentUrl = `http://localhost:5174/checkout?token=${token}`;
 		window.location.href = paymentUrl;
 	}
 
