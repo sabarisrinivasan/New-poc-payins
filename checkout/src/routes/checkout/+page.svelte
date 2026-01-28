@@ -440,7 +440,7 @@
 								</svg>
 								UPI
 							</button>
-							<button
+							<!-- <button
 								class="payment-tab {selectedMethod === 'wallet' ? 'active' : ''}"
 								onclick={() => (selectedMethod = 'wallet')}
 							>
@@ -453,7 +453,7 @@
 									/>
 								</svg>
 								Wallet
-							</button>
+							</button> -->
 						</div>
 
 						<!-- Card Payment Form -->
