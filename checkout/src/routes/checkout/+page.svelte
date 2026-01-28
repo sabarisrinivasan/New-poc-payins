@@ -1,39 +1,156 @@
 <script lang="ts">
-	import { page } from '$app/state';
+	import { jwtDecode } from 'jwt-decode';
 
-	type Response = {
-		txn_id: string;
-		amount: number;
-		callback_url: string;
+	import type { PageData } from './$types';
+	import type { CheckoutSessionSuccessResponse } from './types';
+	import { onDestroy } from 'svelte';
+	
+
+	type PayinCheckoutPayload = {
+		orderId?: string;
+		orgId?: number | string | undefined;
+		purpose?: string;
+		currency?: string;
+		transactionAmount: number;
+
+		customerName?: string;
+		customerEmail?: string;
+		customerPhoneNumber?: string;
+
+		merchantRedirectUrl?: string;
+
+		iss?: string;
+		iat?: number;
+		exp?: number;
+		jti?: string | undefined;
 	};
 
-	const url = page.url;
-	const token = url.searchParams.get('token');
+	let { data }: { data: PageData } = $props();
 
-	let session: Response | undefined = $state();
-	if (token) session = JSON.parse(atob(token));
+	const decoded = jwtDecode<PayinCheckoutPayload>(data?.data || '');
+ 
+	//
+
+	let session: PayinCheckoutPayload | undefined = $state(decoded);
+	
 
 	let isProcessing = $state(false);
 	let paymentSuccess = $state(false);
 	let selectedMethod = $state('card');
 
-	function simulatePay() {
-		isProcessing = true;
+	
+	let loading = $state(false);
+	let successResult = $state<CheckoutSessionSuccessResponse>();
+$inspect(successResult,"successResult");
+		
+	let failureResult = $state();
+$inspect(failureResult,"failureResult");	
 
-		// Simulate payment processing delay
-		setTimeout(() => {
-			isProcessing = false;
-			paymentSuccess = true;
+	// $inspect(result);
+	
+	const upiCollectData = {
+		
+  amount: session?.transactionAmount,
+  currency: session?.currency,
+  customerPhoneNumber: session?.customerPhoneNumber,
+  customerEmail: "vicky@gmail.com",
+  payerVPA: "testuser@upi",
+  orderId: session?.orderId,
+  callBackUrl: "https://yourapp.com/api/payin/callback",
+  orgId: session?.orgId ? parseInt(String(session.orgId)) : undefined,
+  checkoutId: session?.jti,
+  paymentMethod: "UPI_COLLECT"
 
-			// Redirect after showing success animation
-			setTimeout(() => {
-				if (session) {
-					const redirect = `${session.callback_url}?status=success&txn_id=${session.txn_id}`;
-					window.location.href = redirect;
-				}
-			}, 1500);
-		}, 2000);
+
 	}
+
+
+ 	async function handleSubmit() {
+		loading = true;
+		try {
+			const response = await fetch('/api/paymentmode', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(upiCollectData)
+			});
+			
+			
+			
+
+		const	result = await response.json();
+		console.log(result,"result")
+		if (result?.success) {
+			successResult= result.data
+		}
+		if (!result?.success) {
+			failureResult= result.data
+		}
+
+			
+		} catch (error) {
+			// result = { success: false, message: 'Request failed' };
+		} finally {
+			loading = false;
+		}
+	}
+	let transactionStatus = $state(false);
+	let intervalId: ReturnType<typeof setInterval> | null = null;
+		function stopPolling(){
+		if(intervalId){
+			clearInterval(intervalId);
+		}
+	}
+	async function pollTransactionStatus(crn  :string){
+		const transactionStatusApi = successResult?.request?.url
+		console.log(transactionStatusApi,"transactionStatusApi");
+
+		try {
+			const response = await fetch(`/api/paymentmode?crn=${crn}`, {
+				method: 'GET',
+				headers: { 'Content-Type': 'application/json' },
+				
+				
+			});
+			if(response.ok){
+				const result = await response.json();
+				transactionStatus = result.data?.status
+				if(transactionStatus){
+					stopPolling();
+				}
+			}
+			
+		} catch (error) {
+			console.log(error)
+		}
+		
+	}
+	function startPolling(){
+		intervalId = setInterval(() => {
+		if (successResult?.transactionId) {
+			
+			pollTransactionStatus(successResult?.transactionId);
+		}
+		}, 5000);
+	}
+	
+	$effect(() => {
+		if(transactionStatus===false){
+			startPolling();
+		}
+	});
+	
+	// setInterval(() => {
+		
+	// 	if(successResult?.transactionId){
+	// 		// console.log("count");
+	// 		pollTransactionStatus(successResult?.transactionId)
+	// 	}
+		
+	// }, 5000);
+
+		onDestroy(() => {
+		stopPolling();
+	});
 </script>
 
 {#if !session}
@@ -46,6 +163,16 @@
 			<p style="color: var(--color-text-secondary);">The payment link is invalid or has expired.</p>
 		</div>
 	</div>
+	{:else if transactionStatus }
+		<div class="min-h-screen flex items-center justify-center p-4">
+			<div class="text-center">
+				<div class="text-6xl mb-4">✅</div>
+				<h1 class="text-2xl font-semibold mb-2" style="color: var(--color-text-primary);">
+					Payment Successful
+				</h1>
+				<p style="color: var(--color-text-secondary);">Your payment has been processed successfully.</p>
+			</div>
+		</div>
 {:else}
 	<main class="min-h-screen py-8 px-4 sm:px-6 lg:px-8">
 		<div class="max-w-6xl mx-auto">
@@ -264,7 +391,7 @@
 							class="pay-button {isProcessing ? 'processing' : ''} {paymentSuccess
 								? 'success'
 								: ''}"
-							onclick={simulatePay}
+							onclick={handleSubmit}
 							disabled={isProcessing || paymentSuccess}
 						>
 							{#if paymentSuccess}
@@ -286,7 +413,8 @@
 								<div class="spinner"></div>
 								Processing...
 							{:else}
-								Pay ₹{session.amount.toLocaleString('en-IN')}
+								<!-- Pay ₹{session.toLocaleString('en-IN')} -->
+								Pay ₹{session.transactionAmount}
 							{/if}
 						</button>
 
@@ -328,7 +456,8 @@
 						<div class="space-y-4 mb-6">
 							<div class="summary-item">
 								<span>Subtotal</span>
-								<span>₹{session.amount.toLocaleString('en-IN')}</span>
+								<!-- <span>₹{session.amount.toLocaleString('en-IN')}</span> -->
+								<span>₹{session.transactionAmount}</span>
 							</div>
 							<div class="summary-item">
 								<span>Processing fee</span>
@@ -336,12 +465,14 @@
 							</div>
 							<div class="summary-item">
 								<span>Tax (GST 18%)</span>
-								<span>₹{(session.amount * 0.18).toLocaleString('en-IN')}</span>
+								<!-- <span>₹{(session.amount * 0.18).toLocaleString('en-IN')}</span> -->
+								<span>₹{session?.transactionAmount * 0.18}</span>
 							</div>
 							<div class="divider"></div>
 							<div class="summary-item total">
 								<span>Total</span>
-								<span>₹{(session.amount * 1.18).toLocaleString('en-IN')}</span>
+								<!-- <span>₹{(session.amount * 1.18).toLocaleString('en-IN')}</span> -->
+								<span>₹{session?.transactionAmount * 1.18}</span>
 							</div>
 						</div>
 
@@ -365,7 +496,7 @@
 									class="text-sm"
 									style="color: var(--color-text-tertiary); font-family: monospace;"
 								>
-									{session.txn_id}
+									{session.orderId}
 								</p>
 							</div>
 						</div>
