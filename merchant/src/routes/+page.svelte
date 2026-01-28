@@ -63,21 +63,21 @@
 
 	let quantity = $state(1);
 
-	function createPayment() {
-		const txnId = 'txn_' + Date.now();
-		const callbackUrl = encodeURIComponent('http://localhost:5175/callback');
-		const token = btoa(
-			JSON.stringify({
-				txn_id: txnId,
-				amount: 1000 * quantity,
-				callback_url: 'http://localhost:5174/callback'
-			})
-		);
+	// function createPayment() {
+	// 	const txnId = 'txn_' + Date.now();
+	// 	const callbackUrl = encodeURIComponent('http://localhost:5173/callback');
+	// 	const token = btoa(
+	// 		JSON.stringify({
+	// 			txn_id: txnId,
+	// 			amount: 1000 * quantity,
+	// 			callback_url: 'http://localhost:5173/callback'
+	// 		})
+	// 	);
 
-		const paymentUrl = `http://localhost:3003/checkout?token=${token}`;
+	// 	const paymentUrl = `http://localhost:3003/checkout?token=${token}`;
 		
-		window.location.href = paymentUrl;
-	}
+	// 	window.location.href = paymentUrl;
+	// }
 
 	function incrementQuantity() {
 		if (quantity < 10) quantity++;
@@ -187,9 +187,9 @@
 
 					<!-- Quantity Selector -->
 					<div class="quantity-section">
-						<label class="quantity-label">Quantity</label>
+						<span class="quantity-label">Quantity</span>
 						<div class="quantity-controls">
-							<button class="quantity-btn" onclick={decrementQuantity} disabled={quantity <= 1}>
+							<button title="button" class="quantity-btn" onclick={decrementQuantity} disabled={quantity <= 1}>
 								<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path
 										stroke-linecap="round"
@@ -200,7 +200,7 @@
 								</svg>
 							</button>
 							<span class="quantity-value">{quantity}</span>
-							<button class="quantity-btn" onclick={incrementQuantity} disabled={quantity >= 10}>
+							<button title="button" class="quantity-btn" onclick={incrementQuantity} disabled={quantity >= 10}>
 								<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path
 										stroke-linecap="round"

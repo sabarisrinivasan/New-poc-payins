@@ -1,10 +1,18 @@
 <script lang="ts">
+	import { page } from '$app/state';
+	import CircleCheck from '$lib/assets/icons/circleCheck.svelte';
+	import Error from '$lib/assets/icons/error.svelte';
+	import { browser } from '$app/environment';
+	import { onMount } from 'svelte';
+	import QrCode from 'svelte-qrcode';
+	import PhonepeIcon from '$lib/assets/icons/phonepe-icon.svelte';
+	import GooglePay from '$lib/assets/icons/google-pay-icon.svelte';
+	import PaytmLogo from '$lib/assets/icons/paytm-logo.svelte';
 	import { jwtDecode } from 'jwt-decode';
 
 	import type { PageData } from './$types';
 	import type { CheckoutSessionSuccessResponse } from './types';
 	import { onDestroy } from 'svelte';
-	
 
 	type PayinCheckoutPayload = {
 		orderId?: string;
@@ -27,66 +35,287 @@
 
 	let { data }: { data: PageData } = $props();
 
+	// svelte-ignore state_referenced_locally
 	const decoded = jwtDecode<PayinCheckoutPayload>(data?.data || '');
- 
-	//
+
 
 	let session: PayinCheckoutPayload | undefined = $state(decoded);
-	
 
 	let isProcessing = $state(false);
 	let paymentSuccess = $state(false);
 	let selectedMethod = $state('card');
+	let upiId = $state('');
+	let upiError = $state('');
+	let isValidating = $state(false);
+	let isUpiIdValid = $state(false);
+	let touched = $state(false);
+	let debounceTimer: ReturnType<typeof setTimeout>;
+	let selectedUpiApp = $state('');
+	let isMobile = $state(false);
+	let qrCodeUrl = $state('');
+	let openQR = $state(false);
 
-	
+	onMount(() => {
+		if (browser) {
+			isMobile = window.innerWidth <= 768;
+
+			qrCodeUrl = 'https://github.com/';
+
+			const handleResize = () => {
+				isMobile = window.innerWidth <= 768;
+			};
+			window.addEventListener('resize', handleResize);
+			return () => window.removeEventListener('resize', handleResize);
+		}
+	});
+
+	const gst = $derived(session ? Number(session?.transactionAmount) * 0.18 : 0);
+	const totalAmount = $derived(Number(session?.transactionAmount) + gst);
 	let loading = $state(false);
 	let successResult = $state<CheckoutSessionSuccessResponse>();
-$inspect(successResult,"successResult");
-		
+	$inspect(successResult, 'successResult');
+
 	let failureResult = $state();
-$inspect(failureResult,"failureResult");	
+	$inspect(failureResult, 'failureResult');
 
 	// $inspect(result);
-	
-	const upiCollectData = {
-		
-  amount: session?.transactionAmount,
-  currency: session?.currency,
-  customerPhoneNumber: session?.customerPhoneNumber,
-  customerEmail: "vicky@gmail.com",
-  payerVPA: "testuser@upi",
-  orderId: session?.orderId,
-  callBackUrl: "https://yourapp.com/api/payin/callback",
-  orgId: session?.orgId ? parseInt(String(session.orgId)) : undefined,
-  checkoutId: session?.jti,
-  paymentMethod: "UPI_COLLECT"
 
+	async function validateUPI(value: string) {
+		isValidating = true;
+		try {
+			const response = await fetch('/api/vpa-validate', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ vpa: upiId })
+			});
 
+			const validation = await response.json();
+			if (validation.success) {
+				upiError = validation.message;
+				isUpiIdValid = true;
+			} else {
+				upiError = validation.message;
+				isUpiIdValid = false;
+			}
+		} catch (error) {
+			upiError = 'Error verifying UPI ID';
+			isUpiIdValid = false;
+		} finally {
+			isValidating = false;
+		}
 	}
 
+	const upiApps = [
+		{ id: 'googlepay', name: 'Google Pay', icon: GooglePay },
+		{ id: 'phonepe', name: 'PhonePe', icon: PhonepeIcon },
+		{ id: 'paytm', name: 'Paytm', icon: PaytmLogo }
+	];
 
- 	async function handleSubmit() {
+	function handleInput(event: Event) {
+		const target = event.target as HTMLInputElement;
+		const upi = target.value;
+		touched = true;
+		isUpiIdValid = false;
+
+		clearTimeout(debounceTimer);
+
+		upiError = '';
+		isValidating = false;
+
+		// If empty, don't validate
+		if (!upi.trim()) {
+			return;
+		}
+
+		// Set new timer - validate after 2 seconds of inactivity
+		debounceTimer = setTimeout(() => {
+			validateUPI(upi);
+		}, 2000);
+	}
+
+	function parseUPITimestamp(ts: string | null) {
+		if (!ts) return null;
+		return new Date(
+			Number(ts.slice(0, 4)), // year
+			Number(ts.slice(4, 6)) - 1, // month (0-based)
+			Number(ts.slice(6, 8)), // day
+			Number(ts.slice(8, 10)), // hour
+			Number(ts.slice(10, 12)), // minute
+			Number(ts.slice(12, 14)) // second
+		);
+	}
+
+	let timeLeft = $state(0);
+	let timer: ReturnType<typeof setInterval> | null = $state(null);
+
+	function extractQRTime(upiUrl: string) {
+		timer && clearInterval(timer);
+
+		const params = new URLSearchParams(upiUrl.split('?')[1]);
+		const endTs = params.get('QRexpire');
+
+		const endTime = parseUPITimestamp(endTs);
+		if (!endTime) return;
+
+		const update = () => {
+			const diff = Math.floor((endTime.getTime() - Date.now()) / 1000);
+			timeLeft = Math.max(diff, 0);
+
+			if (timeLeft === 0) {
+				timer && clearInterval(timer);
+				extractQRTime(qrCodeUrl);
+			}
+		};
+
+		update(); // run immediately
+		timer = setInterval(update, 1000);
+	}
+
+	function formatMMSS(seconds: number) {
+		const m = Math.floor(seconds / 60);
+		const s = seconds % 60;
+		return `${m}.${s.toString().padStart(2, '0')}`;
+	}
+
+	async function getIntentUrl() {
+		const qrRequestData = {
+			orgId: session?.orgId ? parseInt(String(session.orgId)) : undefined,
+			customerPhoneNumber: session?.customerPhoneNumber,
+			transactionAmount: session?.transactionAmount,
+			currency: session?.currency,
+			mode: 'DYNAMIC_SECURE_QR',
+			orderId: session?.orderId,
+			callbackUrl: session?.merchantRedirectUrl,
+			checkoutId: session?.jti,
+			clientDescription: 'first intent test',
+			source: 'WEB'
+		};
+
+		try {
+			const response = await fetch('/api/upi-intent', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(qrRequestData)
+			});
+
+			const qrResponse = await response.json();
+			return qrResponse;
+		} catch (error) {
+			//    openQR = false
+		} finally {
+			//    openQR = false
+		}
+	}
+
+	let qrLoader = $state(false);
+
+	async function generateQR() {
+		qrLoader = true;
+		const response = await getIntentUrl();
+		if (response.success) {
+			const upiString = response.data.intentUrl;
+			openQR = true;
+			qrCodeUrl = upiString;
+			extractQRTime(upiString);
+			successResult = response.data;
+		} else {
+			openQR = false;
+			failureResult = response.data;
+		}
+		qrLoader = false;
+	}
+
+	async function handleUpiAppClick(appId: 'phonepe' | 'googlepay' | 'paytm') {
+		const response = await getIntentUrl();
+
+		if (response?.success) {
+			const upiString = response.data.intentUrl;
+			const params = upiString.split('?')[1];
+
+			// Detect platform
+			const isAndroid = /android/i.test(navigator.userAgent);
+			const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+
+			const appUrls: Record<'phonepe' | 'googlepay' | 'paytm', { android: string; ios: string }> = {
+				phonepe: {
+					android: `intent://pay?${params}#Intent;scheme=upi;package=com.phonepe.app;end`,
+					ios: `phonepe://pay?${params}`
+				},
+				googlepay: {
+					android: `intent://pay?${params}#Intent;scheme=upi;package=com.google.android.apps.nfc.gpay;end`,
+					ios: `gpay://upi/pay?${params}`
+				},
+				paytm: {
+					android: `intent://pay?${params}#Intent;scheme=upi;package=net.one97.paytm;end`,
+					ios: `paytmmp://upi/pay?${params}`
+				}
+			};
+
+			let targetUrl = '';
+
+			if (isAndroid && appUrls[appId]?.android) {
+				targetUrl = appUrls[appId].android;
+			} else if (isIOS && appUrls[appId]?.ios) {
+				targetUrl = appUrls[appId].ios;
+			} else if (!isAndroid && !isIOS) {
+				return;
+			} else {
+				// Fallback to generic UPI URL
+				targetUrl = upiString;
+			}
+
+			window.location.href = targetUrl;
+
+			// Fallback: If app doesn't open in 2 seconds, show message
+			setTimeout(() => {
+				if (document.hidden) return;
+
+				if (isIOS) {
+					// iOS: Suggest App Store
+					const appStoreUrls = {
+						phonepe: 'https://apps.apple.com/in/app/phonepe/id1170055821',
+						googlepay: 'https://apps.apple.com/in/app/google-pay/id1193357041',
+						paytm: 'https://apps.apple.com/in/app/paytm-secure-payments/id473941634'
+					};
+					if (confirm(`App not installed. Would you like to download it from App Store?`)) {
+						window.location.href = appStoreUrls[appId];
+					}
+				}
+			}, 2000);
+		} else {
+			console.log('retry');
+		}
+	}
+
+	async function handleSubmit() {
 		loading = true;
+		const upiCollectData = {
+			amount: session?.transactionAmount,
+			currency: session?.currency,
+			customerPhoneNumber: session?.customerPhoneNumber,
+			customerEmail: session?.customerEmail,
+			payerVPA: upiId,
+			orderId: session?.orderId,
+			callBackUrl: session?.merchantRedirectUrl,
+			// orgId: session?.orgId ? parseInt(String(session.orgId)) : undefined,
+			orgId: 10094,
+			checkoutId: session?.jti,
+			paymentMethod: 'UPI_COLLECT'
+		};
 		try {
 			const response = await fetch('/api/paymentmode', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify(upiCollectData)
 			});
-			
-			
-			
 
-		const	result = await response.json();
-		console.log(result,"result")
-		if (result?.success) {
-			successResult= result.data
-		}
-		if (!result?.success) {
-			failureResult= result.data
-		}
-
-			
+			const result = await response.json();
+			if (result?.success) {
+				successResult = result.data;
+			}
+			if (!result?.success) {
+				failureResult = result.data;
+			}
 		} catch (error) {
 			// result = { success: false, message: 'Request failed' };
 		} finally {
@@ -95,60 +324,46 @@ $inspect(failureResult,"failureResult");
 	}
 	let transactionStatus = $state(false);
 	let intervalId: ReturnType<typeof setInterval> | null = null;
-		function stopPolling(){
-		if(intervalId){
+	function stopPolling() {
+		if (intervalId) {
 			clearInterval(intervalId);
 		}
 	}
-	async function pollTransactionStatus(crn  :string){
-		const transactionStatusApi = successResult?.request?.url
-		console.log(transactionStatusApi,"transactionStatusApi");
+	async function pollTransactionStatus(crn: string) {
+
+		const transactionStatusApi = successResult?.request?.url;
 
 		try {
 			const response = await fetch(`/api/paymentmode?crn=${crn}`, {
 				method: 'GET',
-				headers: { 'Content-Type': 'application/json' },
-				
-				
+				headers: { 'Content-Type': 'application/json' }
 			});
-			if(response.ok){
+			if (response.ok) {
 				const result = await response.json();
-				transactionStatus = result.data?.status
-				if(transactionStatus){
+				transactionStatus = result.data?.status;
+				if (transactionStatus) {
 					stopPolling();
 				}
 			}
-			
 		} catch (error) {
-			console.log(error)
+			console.log(error);
 		}
-		
 	}
-	function startPolling(){
+	function startPolling() {
 		intervalId = setInterval(() => {
-		if (successResult?.transactionId) {
-			
-			pollTransactionStatus(successResult?.transactionId);
-		}
+			if (successResult?.transactionId) {
+				pollTransactionStatus(successResult?.transactionId);
+			}
 		}, 5000);
 	}
-	
+
 	$effect(() => {
-		if(transactionStatus===false){
+		if (transactionStatus === false) {
 			startPolling();
 		}
 	});
-	
-	// setInterval(() => {
-		
-	// 	if(successResult?.transactionId){
-	// 		// console.log("count");
-	// 		pollTransactionStatus(successResult?.transactionId)
-	// 	}
-		
-	// }, 5000);
 
-		onDestroy(() => {
+	onDestroy(() => {
 		stopPolling();
 	});
 </script>
@@ -163,16 +378,18 @@ $inspect(failureResult,"failureResult");
 			<p style="color: var(--color-text-secondary);">The payment link is invalid or has expired.</p>
 		</div>
 	</div>
-	{:else if transactionStatus }
-		<div class="min-h-screen flex items-center justify-center p-4">
-			<div class="text-center">
-				<div class="text-6xl mb-4">✅</div>
-				<h1 class="text-2xl font-semibold mb-2" style="color: var(--color-text-primary);">
-					Payment Successful
-				</h1>
-				<p style="color: var(--color-text-secondary);">Your payment has been processed successfully.</p>
-			</div>
+{:else if transactionStatus}
+	<div class="min-h-screen flex items-center justify-center p-4">
+		<div class="text-center">
+			<div class="text-6xl mb-4">✅</div>
+			<h1 class="text-2xl font-semibold mb-2" style="color: var(--color-text-primary);">
+				Payment Successful
+			</h1>
+			<p style="color: var(--color-text-secondary);">
+				Your payment has been processed successfully.
+			</p>
 		</div>
+	</div>
 {:else}
 	<main class="min-h-screen py-8 px-4 sm:px-6 lg:px-8">
 		<div class="max-w-6xl mx-auto">
@@ -223,7 +440,7 @@ $inspect(failureResult,"failureResult");
 								</svg>
 								UPI
 							</button>
-							<button
+							<!-- <button
 								class="payment-tab {selectedMethod === 'wallet' ? 'active' : ''}"
 								onclick={() => (selectedMethod = 'wallet')}
 							>
@@ -236,7 +453,7 @@ $inspect(failureResult,"failureResult");
 									/>
 								</svg>
 								Wallet
-							</button>
+							</button> -->
 						</div>
 
 						<!-- Card Payment Form -->
@@ -295,35 +512,132 @@ $inspect(failureResult,"failureResult");
 						{#if selectedMethod === 'upi'}
 							<div class="space-y-4">
 								<div class="form-group">
-									<label for="upiId" class="form-label">UPI ID</label>
-									<input type="text" id="upiId" class="form-input" placeholder="yourname@upi" />
+									<label for="upiId" class="form-label">Pay with UPI ID</label>
+									<input
+										type="text"
+										id="upiId"
+										class="form-input mb-2"
+										placeholder="yourname@upi"
+										oninput={handleInput}
+										bind:value={upiId}
+									/>
+									{#if upiError !== ''}
+										<span
+											class=" flex gap-2 items-center text-xs {!isUpiIdValid
+												? 'text-red-500'
+												: 'text-green-500'}"
+										>
+											{#if !isUpiIdValid}
+												<Error width={'14'} height={'14'} />
+											{:else}
+												<CircleCheck width={'16'} height={'16'} stroke="#5bb98c" />
+											{/if}
+											{upiError}
+										</span>
+										{#if isUpiIdValid}
+											<p class="text-green-500 text-sm mt-2">
+												Please press pay to complete the payment
+											</p>
+										{/if}
+									{/if}
 								</div>
-								<div class="upi-apps">
-									<button class="upi-app">
+								{#if !isMobile}
+									<div>
+										<h3 class="text-sm font-semibold text-gray-700 mb-4">Scan QR code to pay</h3>
 										<div
-											class="w-12 h-12 bg-linear-to-br from-purple-500 to-purple-700 rounded-xl flex items-center justify-center text-white font-bold"
+											class=" relative flex flex-col items-center p-6 bg-linear-to-br from-indigo-50 to-purple-50 rounded-xl border border-indigo-100"
 										>
-											GP
+											<div
+												class="bg-white rounded-xl p-4 w-[180px] shadow-lg flex items-center justify-center"
+												class:blur-sm={!openQR || timeLeft === 0}
+											>
+												<QrCode value={qrCodeUrl} size={160} />
+											</div>
+											{#if openQR}
+												{#if timeLeft === 0}
+													<p class="text-[16px] font-medium text-red-600 text-center mt-4 mb-2">
+														QR code is expired!
+													</p>
+												{:else}
+													<p class="text-[16px] font-medium text-gray-600 text-center mt-4 mb-2">
+														QR code is valid for <span class="text-red-800"
+															>{formatMMSS(timeLeft)}</span
+														> minutes
+													</p>
+												{/if}
+											{/if}
+											<p class="text-sm text-gray-600 text-center mt-4 mb-2">
+												Scan with any UPI app
+											</p>
+											<div class="flex gap-2 items-center">
+												{#each upiApps as app}
+													<div
+														class="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold"
+														title={app.name}
+													>
+														<app.icon />
+													</div>
+												{/each}
+											</div>
+											{#if !openQR}
+												<div
+													class="absolute inset-0 bg-black/40 flex items-center justify-center rounded-lg"
+												>
+													{#if !qrLoader}
+														<button
+															onclick={generateQR}
+															class="bg-white text-black px-4 py-2 rounded-md font-medium"
+														>
+															Pay via QR
+														</button>
+													{:else}
+														<span class="h-8 w-8 rounded-full  animate-spin border-2 border-gray-300 border-t-gray-600"></span>
+													{/if}
+												</div>
+											{/if}
 										</div>
-										<span>Google Pay</span>
-									</button>
-									<button class="upi-app">
-										<div
-											class="w-12 h-12 bg-linear-to-br from-blue-500 to-blue-700 rounded-xl flex items-center justify-center text-white font-bold"
-										>
-											PP
+									</div>
+								{:else}
+									<div class="form-group">
+										<label for="upiId" class="form-label">Pay With UPI APPS</label>
+										<div class="upi-apps">
+											{#each upiApps as apps, index (index)}
+												<button class="upi-app" onclick={() => handleUpiAppClick('googlepay')}>
+													<div
+														class="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold"
+													>
+														<apps.icon />
+													</div>
+													<span>{apps.name}</span>
+												</button>
+											{/each}
+											<!-- <button class="upi-app" onclick={() => handleUpiAppClick('googlepay')}>
+												<div
+													class="w-12 h-12 bg-linear-to-br from-purple-500 to-purple-700 rounded-xl flex items-center justify-center text-white font-bold"
+												>
+													GP
+												</div>
+												<span>Google Pay</span>
+											</button>
+											<button class="upi-app" onclick={() => handleUpiAppClick('phonepe')}>
+												<div
+													class="w-12 h-12 bg-linear-to-br from-blue-500 to-blue-700 rounded-xl flex items-center justify-center text-white font-bold"
+												>
+													PP
+												</div>
+												<span>PhonePe</span>
+											</button>
+											<button class="upi-app" onclick={() => handleUpiAppClick('paytm')}>
+												<div
+													class="w-12 h-12 bg-linear-to-br from-indigo-500 to-indigo-700 rounded-xl flex items-center justify-center text-white font-bold"
+												>
+													PT
+												</div>
+												<span>Paytm</span>
+											</button> -->
 										</div>
-										<span>PhonePe</span>
-									</button>
-									<button class="upi-app">
-										<div
-											class="w-12 h-12 bg-linear-to-br from-indigo-500 to-indigo-700 rounded-xl flex items-center justify-center text-white font-bold"
-										>
-											PT
-										</div>
-										<span>Paytm</span>
-									</button>
-								</div>
+									</div>
+								{/if}
 							</div>
 						{/if}
 
@@ -392,7 +706,7 @@ $inspect(failureResult,"failureResult");
 								? 'success'
 								: ''}"
 							onclick={handleSubmit}
-							disabled={isProcessing || paymentSuccess}
+							disabled={isProcessing || paymentSuccess || !isUpiIdValid}
 						>
 							{#if paymentSuccess}
 								<svg
@@ -413,8 +727,7 @@ $inspect(failureResult,"failureResult");
 								<div class="spinner"></div>
 								Processing...
 							{:else}
-								<!-- Pay ₹{session.toLocaleString('en-IN')} -->
-								Pay ₹{session.transactionAmount}
+								Pay ₹{totalAmount.toLocaleString('en-IN')}
 							{/if}
 						</button>
 
@@ -477,12 +790,7 @@ $inspect(failureResult,"failureResult");
 						</div>
 
 						<div class="info-box">
-							<svg
-								class="w-5 h-5 flex-shrink-0"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-							>
+							<svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 								<path
 									stroke-linecap="round"
 									stroke-linejoin="round"
@@ -502,12 +810,7 @@ $inspect(failureResult,"failureResult");
 						</div>
 
 						<div class="info-box mt-4">
-							<svg
-								class="w-5 h-5 flex-shrink-0"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-							>
+							<svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 								<path
 									stroke-linecap="round"
 									stroke-linejoin="round"

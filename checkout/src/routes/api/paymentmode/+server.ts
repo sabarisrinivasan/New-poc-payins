@@ -3,18 +3,7 @@ import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request, cookies }) => {
 	const checkOutId = cookies.get('checkoutId');
-	const payinRequest = {
-		amount: '1500.00',
-		currency: 'INR',
-		customerPhoneNumber: '74444545484',
-		customerEmail: 'vicky@gmail.com',
-		payerVPA: 'testuser@upi',
-		orderId: 'YQTQ23242193102434',
-		callBackUrl: 'https://yourapp.com/api/payin/callback',
-		orgId: 10094,
-		checkoutId: `${checkOutId}`,
-		paymentMethod: 'UPI_COLLECT'
-	};
+	const requestData = await request.json();
 
 	try {
 		const response = await fetch(
@@ -25,7 +14,7 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 					'Content-Type': 'application/json',
 					'X-Checkout-Key': `${checkOutId}`
 				},
-				body: JSON.stringify(payinRequest)
+				body: JSON.stringify(requestData)
 			}
 		);
 
@@ -70,7 +59,6 @@ export const GET: RequestHandler = async ({ url }) => {
 		}
 
 		const data = await response.json();
-		console.log(data, 'data');
 
 		return json({ success: true, data });
 	} catch (error) {
