@@ -8,18 +8,38 @@
 	import PhonepeIcon from '$lib/assets/icons/phonepe-icon.svelte';
 	import GooglePay from '$lib/assets/icons/google-pay-icon.svelte';
 	import PaytmLogo from '$lib/assets/icons/paytm-logo.svelte';
+	import { jwtDecode } from 'jwt-decode';
 
-	type Response = {
-		txn_id: string;
-		amount: number;
-		callback_url: string;
+	import type { PageData } from './$types';
+	import type { CheckoutSessionSuccessResponse } from './types';
+	import { onDestroy } from 'svelte';
+
+	type PayinCheckoutPayload = {
+		orderId?: string;
+		orgId?: number | string | undefined;
+		purpose?: string;
+		currency?: string;
+		transactionAmount: number;
+
+		customerName?: string;
+		customerEmail?: string;
+		customerPhoneNumber?: string;
+
+		merchantRedirectUrl?: string;
+
+		iss?: string;
+		iat?: number;
+		exp?: number;
+		jti?: string | undefined;
 	};
 
-	const url = page.url;
-	const token = url.searchParams.get('token');
+	let { data }: { data: PageData } = $props();
 
-	let session: Response | undefined = $state();
-	if (token) session = JSON.parse(atob(token));
+	// svelte-ignore state_referenced_locally
+	const decoded = jwtDecode<PayinCheckoutPayload>(data?.data || '');
+
+
+	let session: PayinCheckoutPayload | undefined = $state(decoded);
 
 	let isProcessing = $state(false);
 	let paymentSuccess = $state(false);
@@ -49,30 +69,21 @@
 		}
 	});
 
-	const gst = $derived(session ? session?.amount * 0.18 : 0);
-	const totalAmount = $derived(session ? session?.amount + gst : 0);
+	const gst = $derived(session ? Number(session?.transactionAmount) * 0.18 : 0);
+	const totalAmount = $derived(Number(session?.transactionAmount) + gst);
+	let loading = $state(false);
+	let successResult = $state<CheckoutSessionSuccessResponse>();
+	$inspect(successResult, 'successResult');
 
-	function simulatePay() {
-		isProcessing = true;
+	let failureResult = $state();
+	$inspect(failureResult, 'failureResult');
 
-		setTimeout(() => {
-			isProcessing = false;
-			paymentSuccess = true;
-
-			// Redirect after showing success animation
-			setTimeout(() => {
-				if (session) {
-					const redirect = `${session.callback_url}?status=success&txn_id=${session.txn_id}`;
-					window.location.href = redirect;
-				}
-			}, 1500);
-		}, 2000);
-	}
+	// $inspect(result);
 
 	async function validateUPI(value: string) {
 		isValidating = true;
 		try {
-			const response = await fetch('/api/checkout', {
+			const response = await fetch('/api/vpa-validate', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ vpa: upiId })
@@ -168,14 +179,14 @@
 
 	async function getIntentUrl() {
 		const qrRequestData = {
-			orgId: 10024,
-			customerPhoneNumber: '7338798415',
-			transactionAmount: totalAmount.toString(),
-			currency: 'INR',
+			orgId: session?.orgId ? parseInt(String(session.orgId)) : undefined,
+			customerPhoneNumber: session?.customerPhoneNumber,
+			transactionAmount: session?.transactionAmount,
+			currency: session?.currency,
 			mode: 'DYNAMIC_SECURE_QR',
-			orderId: '57613687',
-			callbackUrl: session?.callback_url,
-			checkoutId: 'checkout-id-01',
+			orderId: session?.orderId,
+			callbackUrl: session?.merchantRedirectUrl,
+			checkoutId: session?.jti,
 			clientDescription: 'first intent test',
 			source: 'WEB'
 		};
@@ -196,61 +207,165 @@
 		}
 	}
 
-	async function generateQR() {
-		const response = await getIntentUrl();
-		console.log(response);
+	let qrLoader = $state(false);
 
+	async function generateQR() {
+		qrLoader = true;
+		const response = await getIntentUrl();
 		if (response.success) {
 			const upiString = response.data.intentUrl;
 			openQR = true;
-			//   const upiString="upi://pay?QRexpire=20260120152947&QRts=20260120133650&am=360&cu=INR&mc=m1&mid=m01&mode=15&orgid=gateway-01&pa=merchant%40upi&pn=merchant&qrMedium=06&sign=&tn=first+intent+test&tr=136533449992429568&ver=01";
 			qrCodeUrl = upiString;
 			extractQRTime(upiString);
+			successResult = response.data;
 		} else {
 			openQR = false;
+			failureResult = response.data;
 		}
+		qrLoader = false;
 	}
 
-	// const upiAppLinks:Record<string,string> = {
-	// // svelte-ignore state_referenced_locally
-	// googlepay: `Intent;scheme=upi;package=com.google.android.apps.nbu.paisa.user;end`,
-	// // svelte-ignore state_referenced_locally
-	// phonepe: `phonepe://pay?pa=merchant@paytm&pn=Flipopay&am=${totalAmount}&cu=INR`,
-	// // svelte-ignore state_referenced_locally
-	// paytm: `paytmmp://pay?pa=merchant@paytm&pn=Flipopay&am=${totalAmount}&cu=INR`
-	// };
-
-	async function handleUpiAppClick(appId: string) {
+	async function handleUpiAppClick(appId: 'phonepe' | 'googlepay' | 'paytm') {
 		const response = await getIntentUrl();
-		console.log(response);
+
 		if (response?.success) {
 			const upiString = response.data.intentUrl;
-			selectedUpiApp = appId;
+			const params = upiString.split('?')[1];
 
-			let intentUrl = '';
+			// Detect platform
+			const isAndroid = /android/i.test(navigator.userAgent);
+			const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
 
-			switch (appId) {
-				case 'googlepay':
-					intentUrl = `intent://pay?${upiString.split('?')[1]}#Intent;scheme=upi;package=com.google.android.apps.nbu.paisa.user;end`;
-					break;
+			const appUrls: Record<'phonepe' | 'googlepay' | 'paytm', { android: string; ios: string }> = {
+				phonepe: {
+					android: `intent://pay?${params}#Intent;scheme=upi;package=com.phonepe.app;end`,
+					ios: `phonepe://pay?${params}`
+				},
+				googlepay: {
+					android: `intent://pay?${params}#Intent;scheme=upi;package=com.google.android.apps.nfc.gpay;end`,
+					ios: `gpay://upi/pay?${params}`
+				},
+				paytm: {
+					android: `intent://pay?${params}#Intent;scheme=upi;package=net.one97.paytm;end`,
+					ios: `paytmmp://upi/pay?${params}`
+				}
+			};
 
-				case 'phonepe':
-					intentUrl = `intent://pay?${upiString.split('?')[1]}#Intent;scheme=upi;package=com.phonepe.app;end`;
-					break;
+			let targetUrl = '';
 
-				case 'paytm':
-					intentUrl = `intent://pay?${upiString.split('?')[1]}#Intent;scheme=upi;package=net.one97.paytm;end`;
-					break;
-
-				default:
-					intentUrl = upiString;
+			if (isAndroid && appUrls[appId]?.android) {
+				targetUrl = appUrls[appId].android;
+			} else if (isIOS && appUrls[appId]?.ios) {
+				targetUrl = appUrls[appId].ios;
+			} else if (!isAndroid && !isIOS) {
+				return;
+			} else {
+				// Fallback to generic UPI URL
+				targetUrl = upiString;
 			}
 
-			window.location.href = intentUrl;
+			window.location.href = targetUrl;
+
+			// Fallback: If app doesn't open in 2 seconds, show message
+			setTimeout(() => {
+				if (document.hidden) return;
+
+				if (isIOS) {
+					// iOS: Suggest App Store
+					const appStoreUrls = {
+						phonepe: 'https://apps.apple.com/in/app/phonepe/id1170055821',
+						googlepay: 'https://apps.apple.com/in/app/google-pay/id1193357041',
+						paytm: 'https://apps.apple.com/in/app/paytm-secure-payments/id473941634'
+					};
+					if (confirm(`App not installed. Would you like to download it from App Store?`)) {
+						window.location.href = appStoreUrls[appId];
+					}
+				}
+			}, 2000);
 		} else {
-			// openQR = false
+			console.log('retry');
 		}
 	}
+
+	async function handleSubmit() {
+		loading = true;
+		const upiCollectData = {
+			amount: session?.transactionAmount,
+			currency: session?.currency,
+			customerPhoneNumber: session?.customerPhoneNumber,
+			customerEmail: session?.customerEmail,
+			payerVPA: upiId,
+			orderId: session?.orderId,
+			callBackUrl: session?.merchantRedirectUrl,
+			// orgId: session?.orgId ? parseInt(String(session.orgId)) : undefined,
+			orgId: 10094,
+			checkoutId: session?.jti,
+			paymentMethod: 'UPI_COLLECT'
+		};
+		try {
+			const response = await fetch('/api/paymentmode', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(upiCollectData)
+			});
+
+			const result = await response.json();
+			if (result?.success) {
+				successResult = result.data;
+			}
+			if (!result?.success) {
+				failureResult = result.data;
+			}
+		} catch (error) {
+			// result = { success: false, message: 'Request failed' };
+		} finally {
+			loading = false;
+		}
+	}
+	let transactionStatus = $state(false);
+	let intervalId: ReturnType<typeof setInterval> | null = null;
+	function stopPolling() {
+		if (intervalId) {
+			clearInterval(intervalId);
+		}
+	}
+	async function pollTransactionStatus(crn: string) {
+
+		const transactionStatusApi = successResult?.request?.url;
+
+		try {
+			const response = await fetch(`/api/paymentmode?crn=${crn}`, {
+				method: 'GET',
+				headers: { 'Content-Type': 'application/json' }
+			});
+			if (response.ok) {
+				const result = await response.json();
+				transactionStatus = result.data?.status;
+				if (transactionStatus) {
+					stopPolling();
+				}
+			}
+		} catch (error) {
+			console.log(error);
+		}
+	}
+	function startPolling() {
+		intervalId = setInterval(() => {
+			if (successResult?.transactionId) {
+				pollTransactionStatus(successResult?.transactionId);
+			}
+		}, 5000);
+	}
+
+	$effect(() => {
+		if (transactionStatus === false) {
+			startPolling();
+		}
+	});
+
+	onDestroy(() => {
+		stopPolling();
+	});
 </script>
 
 {#if !session}
@@ -261,6 +376,18 @@
 				Invalid Session
 			</h1>
 			<p style="color: var(--color-text-secondary);">The payment link is invalid or has expired.</p>
+		</div>
+	</div>
+{:else if transactionStatus}
+	<div class="min-h-screen flex items-center justify-center p-4">
+		<div class="text-center">
+			<div class="text-6xl mb-4">✅</div>
+			<h1 class="text-2xl font-semibold mb-2" style="color: var(--color-text-primary);">
+				Payment Successful
+			</h1>
+			<p style="color: var(--color-text-secondary);">
+				Your payment has been processed successfully.
+			</p>
 		</div>
 	</div>
 {:else}
@@ -422,13 +549,13 @@
 										>
 											<div
 												class="bg-white rounded-xl p-4 w-[180px] shadow-lg flex items-center justify-center"
-												class:blur-sm={!openQR}
+												class:blur-sm={!openQR || timeLeft === 0}
 											>
 												<QrCode value={qrCodeUrl} size={160} />
 											</div>
 											{#if openQR}
 												{#if timeLeft === 0}
-													<p class="text-[16px] font-medium text-gray-600 text-center mt-4 mb-2">
+													<p class="text-[16px] font-medium text-red-600 text-center mt-4 mb-2">
 														QR code is expired!
 													</p>
 												{:else}
@@ -448,7 +575,6 @@
 														class="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold"
 														title={app.name}
 													>
-														<!-- {app.component || app.name.substring(0, 2).toUpperCase()} -->
 														<app.icon />
 													</div>
 												{/each}
@@ -457,12 +583,16 @@
 												<div
 													class="absolute inset-0 bg-black/40 flex items-center justify-center rounded-lg"
 												>
-													<button
-														onclick={generateQR}
-														class="bg-white text-black px-4 py-2 rounded-md font-medium"
-													>
-														Pay via QR
-													</button>
+													{#if !qrLoader}
+														<button
+															onclick={generateQR}
+															class="bg-white text-black px-4 py-2 rounded-md font-medium"
+														>
+															Pay via QR
+														</button>
+													{:else}
+														<span class="h-8 w-8 rounded-full  animate-spin border-2 border-gray-300 border-t-gray-600"></span>
+													{/if}
 												</div>
 											{/if}
 										</div>
@@ -575,7 +705,7 @@
 							class="pay-button {isProcessing ? 'processing' : ''} {paymentSuccess
 								? 'success'
 								: ''}"
-							onclick={simulatePay}
+							onclick={handleSubmit}
 							disabled={isProcessing || paymentSuccess || !isUpiIdValid}
 						>
 							{#if paymentSuccess}
@@ -639,7 +769,8 @@
 						<div class="space-y-4 mb-6">
 							<div class="summary-item">
 								<span>Subtotal</span>
-								<span>₹{session.amount.toLocaleString('en-IN')}</span>
+								<!-- <span>₹{session.amount.toLocaleString('en-IN')}</span> -->
+								<span>₹{session.transactionAmount}</span>
 							</div>
 							<div class="summary-item">
 								<span>Processing fee</span>
@@ -647,12 +778,14 @@
 							</div>
 							<div class="summary-item">
 								<span>Tax (GST 18%)</span>
-								<span>₹{(session.amount * 0.18).toLocaleString('en-IN')}</span>
+								<!-- <span>₹{(session.amount * 0.18).toLocaleString('en-IN')}</span> -->
+								<span>₹{session?.transactionAmount * 0.18}</span>
 							</div>
 							<div class="divider"></div>
 							<div class="summary-item total">
 								<span>Total</span>
-								<span>₹{(session.amount * 1.18).toLocaleString('en-IN')}</span>
+								<!-- <span>₹{(session.amount * 1.18).toLocaleString('en-IN')}</span> -->
+								<span>₹{session?.transactionAmount * 1.18}</span>
 							</div>
 						</div>
 
@@ -671,7 +804,7 @@
 									class="text-sm"
 									style="color: var(--color-text-tertiary); font-family: monospace;"
 								>
-									{session.txn_id}
+									{session.orderId}
 								</p>
 							</div>
 						</div>

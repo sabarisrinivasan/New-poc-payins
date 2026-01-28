@@ -1,22 +1,83 @@
 <script lang="ts">
 	import Tshirt from '$lib/images/t-shirt.png';
+	
+	import { enhance } from '$app/forms';
+  
+  let { form } = $props();
 
-	let quantity = 1;
+ 
+  // svelte-ignore state_referenced_locally
+    $inspect(form,"form");
+	// async function handleVerify(token: string) {
+	// 	try {
+			
+	// 		const result = await checkUpiVerify(token);
 
-	function createPayment() {
-		const txnId = 'txn_' + Date.now();
-		const callbackUrl = encodeURIComponent('http://localhost:5173/callback');
-		const token = btoa(
-			JSON.stringify({
-				txn_id: txnId,
-				amount: 1000 * quantity,
-				callback_url: 'http://localhost:5173/callback'
-			})
-		);
+	// 		if (result.status === 200) {
+	// 			console.log('Payment verified successfully:', result);
+	// 		} else {
+	// 			console.log('Payment verification failed:', result);
+	// 		}
+			
+	// 		console.log('Verification result:', result);
+	// 	} catch (err) {
+	// 		console.error(err);
+	// 	} finally {
+	// 		// loading = false;
+	// 	}
+	// }
+	// const checkApiVerify = async (token: string) => {
+	// 	try {
+			
+	// 		const data = await checkUpiVerify(token);
+	// 		verifyResult= data?.status
+			
+			
+	// 	} catch (error) {
+	// 		console.error('Error verifying payment:', error);
+	// 		return null;
+	// 	}
+	// };
 
-		const paymentUrl = `http://localhost:5174/checkout?token=${token}`;
-		window.location.href = paymentUrl;
-	}
+	
+	$effect(() => {
+		if (form?.success && form?.response) {
+			
+			// const token1 = form.response.checkoutUrl.split("/pay/")[1];
+			const token1 = form.response.checkoutUrl;
+			console.log(token1,"token1");
+			
+
+			// console.log(token1,"token");
+			// if (token1){
+			// 	handleVerify(token1);
+			// }
+			
+			window.location.href = `http://localhost:3003/checkout?token=${token1}`;
+			
+			
+		}
+	});
+  
+  let loading = $state(false);
+
+	let quantity = $state(1);
+
+	// function createPayment() {
+	// 	const txnId = 'txn_' + Date.now();
+	// 	const callbackUrl = encodeURIComponent('http://localhost:5173/callback');
+	// 	const token = btoa(
+	// 		JSON.stringify({
+	// 			txn_id: txnId,
+	// 			amount: 1000 * quantity,
+	// 			callback_url: 'http://localhost:5173/callback'
+	// 		})
+	// 	);
+
+	// 	const paymentUrl = `http://localhost:3003/checkout?token=${token}`;
+		
+	// 	window.location.href = paymentUrl;
+	// }
 
 	function incrementQuantity() {
 		if (quantity < 10) quantity++;
@@ -126,9 +187,9 @@
 
 					<!-- Quantity Selector -->
 					<div class="quantity-section">
-						<label class="quantity-label">Quantity</label>
+						<span class="quantity-label">Quantity</span>
 						<div class="quantity-controls">
-							<button class="quantity-btn" onclick={decrementQuantity} disabled={quantity <= 1}>
+							<button title="button" class="quantity-btn" onclick={decrementQuantity} disabled={quantity <= 1}>
 								<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path
 										stroke-linecap="round"
@@ -139,7 +200,7 @@
 								</svg>
 							</button>
 							<span class="quantity-value">{quantity}</span>
-							<button class="quantity-btn" onclick={incrementQuantity} disabled={quantity >= 10}>
+							<button title="button" class="quantity-btn" onclick={incrementQuantity} disabled={quantity >= 10}>
 								<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path
 										stroke-linecap="round"
@@ -153,7 +214,17 @@
 					</div>
 
 					<!-- Purchase Button -->
-					<button onclick={createPayment} class="purchase-btn">
+					 <form 
+    method="POST"
+    use:enhance={() => {
+      loading = true;
+      return async ({ update }) => {
+        await update();
+        loading = false;
+      };
+    }}
+  >
+					<button type="submit" class="purchase-btn" disabled={loading} >
 						<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path
 								stroke-linecap="round"
@@ -162,8 +233,9 @@
 								d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"
 							/>
 						</svg>
-						<span>Proceed to Payment</span>
+						<span>  {loading ? 'Processing...' : 'Proceed to Payment'}</span>
 					</button>
+					 </form>				
 
 					<!-- Security Badge -->
 					<div class="security-badge">

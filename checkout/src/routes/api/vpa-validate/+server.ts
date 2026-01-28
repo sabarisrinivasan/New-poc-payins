@@ -3,7 +3,6 @@ import type { RequestHandler } from '@sveltejs/kit';
 export const POST: RequestHandler = async ({ request }) => {
   const { vpa } = await request.json();
   try {
-
     const res = await fetch(
       `${import.meta.env.VITE_API_URL}/payins/${10094}/vpa/validate`,
       {
@@ -14,12 +13,7 @@ export const POST: RequestHandler = async ({ request }) => {
         body: JSON.stringify({vpa:vpa})
       }
     );
-
-    console.log(vpa);
-    
     const data = await res.json();
-    console.log(data);
-
     if (data.statusCode === 200) {
       return json({ success: true, message: data.message })
     } else {
