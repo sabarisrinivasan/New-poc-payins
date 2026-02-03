@@ -13,7 +13,7 @@ export const load: PageServerLoad = async ({ url }) => {
 
 	try {
 		const response = await fetch(
-			`https://dev-unbadgedserver.flipopay.com/api/v1/payins/checkout-session/verify?checkoutToken=${token}`,
+			`${import.meta.env.VITE_API_URL}/payins/checkout-session/verify?checkoutToken=${token}`,
 			{
 				method: 'GET',
 				headers: {

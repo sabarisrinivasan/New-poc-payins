@@ -1,10 +1,12 @@
 <script>
 	import { page } from '$app/state';
 	const url = page.url;
+	
 	const status = url.searchParams.get('status');
-	const txnId = url.searchParams.get('txn_id');
+	
+	const txnId = url.searchParams.get('transactionId');
 
-	const isSuccess = status === 'success';
+	const isSuccess = status === 'SUCCESS';
 </script>
 
 <main class="min-h-screen flex items-center justify-center p-4">

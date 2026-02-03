@@ -6,17 +6,14 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 	const requestData = await request.json();
 
 	try {
-		const response = await fetch(
-			'https://dev-unbadgedserver.flipopay.com/api/v1/payins/upi/collect',
-			{
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-					'X-Checkout-Key': `${checkOutId}`
-				},
-				body: JSON.stringify(requestData)
-			}
-		);
+		const response = await fetch(`${import.meta.env.VITE_API_URL}/payins/upi/collect`, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				'X-Checkout-Key': `${checkOutId}`
+			},
+			body: JSON.stringify(requestData)
+		});
 
 		if (!response.ok) {
 			const errorData = await response.json();
@@ -42,15 +39,12 @@ export const GET: RequestHandler = async ({ url }) => {
 	const transactionId = url.searchParams.get('crn');
 
 	try {
-		const response = await fetch(
-			`https://dev-unbadgedserver.flipopay.com/api/v1/payins/status/${transactionId}`,
-			{
-				method: 'GET',
-				headers: {
-					'Content-Type': 'application/json'
-				}
+		const response = await fetch(`${import.meta.env.VITE_API_URL}/payins/status/${transactionId}`, {
+			method: 'GET',
+			headers: {
+				'Content-Type': 'application/json'
 			}
-		);
+		});
 
 		if (!response.ok) {
 			const errorData = await response.json();

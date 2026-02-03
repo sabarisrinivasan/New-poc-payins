@@ -340,9 +340,13 @@
 			});
 			if (response.ok) {
 				const result = await response.json();
+				
 				transactionStatus = result.data?.status;
+				
 				if (transactionStatus) {
 					stopPolling();
+			window.location.href = `${successResult?.redirectUrl || '/'}?status=${transactionStatus}&transactionId=${successResult?.transactionId}`;
+
 				}
 			}
 		} catch (error) {
