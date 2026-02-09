@@ -1,9 +1,10 @@
-import type { Actions, PageServerLoad } from './$types';
+import { env } from '$env/dynamic/private';
+import { redirect } from '@sveltejs/kit';
+import type {  PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ url }) => {
+export const load: PageServerLoad = async ({ url,locals }) => {
 	const tokenParam = url.searchParams.get('token');
 	const token = tokenParam?.split('/pay/')[1];
-
 	if (!token) {
 		return {
 			success: false,
@@ -13,7 +14,7 @@ export const load: PageServerLoad = async ({ url }) => {
 
 	try {
 		const response = await fetch(
-			`https://dev-unbadgedserver.flipopay.com/api/v1/payins/checkout-session/verify?checkoutToken=${token}`,
+			`${env.VITE_API_URL}/payins/checkout-session/verify?checkoutToken=${token}`,
 			{
 				method: 'GET',
 				headers: {
@@ -24,20 +25,17 @@ export const load: PageServerLoad = async ({ url }) => {
 
 		if (!response.ok) {
 			const errorData = await response.json();
-
-			return {
-				success: false,
-				message: errorData.message || 'Verification failed',
-				status: response.status
-			};
+             console.log(errorData,"error")
+		    throw redirect(303,"/session-expired")
 		}
 
 		const data = await response.json();
+		console.log(data,"data")
 		return {
 			success: true,
 			message: data.message,
 			status: response.status,
-			data: token
+			data: locals.checkoutData
 		};
 	} catch (error) {
 		return {
@@ -48,8 +46,3 @@ export const load: PageServerLoad = async ({ url }) => {
 	}
 };
 
-export const actions: Actions = {
-	UpiPayment: async ({}) => {
-		// const fo
-	}
-};
