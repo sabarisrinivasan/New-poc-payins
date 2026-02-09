@@ -123,7 +123,7 @@ export function createPaymentStore() {
 				transactionId = paymentData?.transactionId;
 				transactionStatus = paymentData?.transactionStatus;
 				showModal = true;
-               
+
 				if (paymentData?.transactionStatus === 'PENDING') {
 					startPolling(paymentData.transactionId, paymentData.expiresAt);
 				} else if (paymentData?.transactionStatus === 'SUCCESS') {
@@ -190,9 +190,9 @@ export function createPaymentStore() {
 
 			const data = await response.json();
 			if (!data.success) return;
-            
+
 			const statusData = data.data;
-            console.log(statusData,"verify")
+			console.log(statusData, 'verify');
 			transactionStatus = statusData.transactionStatus || statusData.status;
 
 			paymentData = paymentData ? { ...paymentData, ...statusData } : statusData;

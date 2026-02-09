@@ -1,8 +1,8 @@
 import { env } from '$env/dynamic/private';
 import { redirect } from '@sveltejs/kit';
-import type {  PageServerLoad } from './$types';
+import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ url,locals }) => {
+export const load: PageServerLoad = async ({ url, locals }) => {
 	const tokenParam = url.searchParams.get('token');
 	const token = tokenParam?.split('/pay/')[1];
 	if (!token) {
@@ -25,12 +25,12 @@ export const load: PageServerLoad = async ({ url,locals }) => {
 
 		if (!response.ok) {
 			const errorData = await response.json();
-             console.log(errorData,"error")
-		    throw redirect(303,"/session-expired")
+			console.log(errorData, 'error');
+			throw redirect(303, '/session-expired');
 		}
 
 		const data = await response.json();
-		console.log(data,"data")
+		console.log(data, 'data');
 		return {
 			success: true,
 			message: data.message,
@@ -45,4 +45,3 @@ export const load: PageServerLoad = async ({ url,locals }) => {
 		};
 	}
 };
-

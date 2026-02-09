@@ -1,10 +1,10 @@
 <script lang="ts">
-interface PropType {
-	class?: string;
-	width?: string;
-	height?: string;
-}
-let {height , width , class:className}:PropType = $props()
+	interface PropType {
+		class?: string;
+		width?: string;
+		height?: string;
+	}
+	let { height, width, class: className }: PropType = $props();
 </script>
 
 <svg

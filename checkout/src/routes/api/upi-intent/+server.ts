@@ -3,7 +3,7 @@ import type { RequestHandler } from '@sveltejs/kit';
 
 export const POST: RequestHandler = async ({ request }) => {
 	const intentRequest = await request.json();
-   console.log(intentRequest)
+	console.log(intentRequest);
 	try {
 		const res = await fetch(`${import.meta.env.VITE_API_URL}/payins/upi/intent`, {
 			method: 'POST',
@@ -14,7 +14,6 @@ export const POST: RequestHandler = async ({ request }) => {
 		});
 
 		const data = await res.json();
-		
 
 		return json({ success: true, data: data });
 	} catch (error) {

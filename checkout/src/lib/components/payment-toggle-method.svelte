@@ -1,5 +1,8 @@
 <script lang="ts">
-	let { paymentMethod, onMethodChange }: {
+	let {
+		paymentMethod,
+		onMethodChange
+	}: {
 		paymentMethod: 'upi-id' | 'qr-code';
 		onMethodChange: (method: 'upi-id' | 'qr-code') => void;
 	} = $props();

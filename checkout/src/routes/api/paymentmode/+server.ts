@@ -4,7 +4,7 @@ import type { RequestHandler } from './$types';
 export const POST: RequestHandler = async ({ request, cookies }) => {
 	const checkOutId = cookies.get('checkoutId');
 	const requestData = await request.json();
-   console.log(checkOutId)
+	console.log(checkOutId);
 	try {
 		const response = await fetch(
 			'https://dev-unbadgedserver.flipopay.com/api/v1/payins/upi/collect',
@@ -20,12 +20,12 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 
 		if (!response.ok) {
 			const errorData = await response.json();
-              console.log(errorData,"error")
+			console.log(errorData, 'error');
 			return json({ success: false, message: errorData.message, data: errorData.data });
 		}
 
 		const data = await response.json();
-        console.log(data,"success")
+		console.log(data, 'success');
 		return json({ success: true, data });
 	} catch (error) {
 		return json(
@@ -37,4 +37,3 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 		);
 	}
 };
-

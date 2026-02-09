@@ -8,7 +8,7 @@
 	--color-success: #00d924;
 	--color-error: #df1b41;
 	--color-warning: #f5a623;
-	
+
 	/* Gradients */
 	--gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 	--gradient-success: linear-gradient(135deg, #00d924 0%, #00a81d 100%);
@@ -127,7 +127,8 @@ body {
 }
 
 @keyframes pulse {
-	0%, 100% {
+	0%,
+	100% {
 		opacity: 1;
 		transform: scale(1);
 	}
@@ -138,7 +139,8 @@ body {
 }
 
 @keyframes bounce {
-	0%, 100% {
+	0%,
+	100% {
 		transform: translateY(0);
 	}
 	50% {
