@@ -1,12 +1,13 @@
 <script lang="ts">
 	import type { PageData } from './$types';
 	import { createPaymentStore } from '$lib/stores/paymet.svelte';
-	import UpiInput from '$lib/components/upi-input.svelte';
-	import PaymentButton from '$lib/components/payment-button.svelte';
-	import PaymentModal from '$lib/components/payment-modal.svelte';
-	import QrCodePayment from '$lib/components/qr-code-payment.svelte';
+	import UpiInput from '$lib/components/upi-input/index.svelte';
+	import PaymentButton from '$lib/components/payment-button/index.svelte';
+	import PaymentModal from '$lib/components/payment-modal/index.svelte';
+	import QrCodePayment from '$lib/components/qr-code-payment/index.svelte';
 	import type { QRPaymentStatusResponse } from '$lib/utils/types';
-	import Modal from '$lib/components/modal.svelte';
+	import Modal from '$lib/components/modal/index.svelte';
+	
 
 	let { data }: { data: PageData } = $props();
 	// State for payment method selection

@@ -39,9 +39,9 @@
 
 		<!-- QR Code Display -->
 		<div class="qr-display-wrapper">
-			<div class="qr-code-box">
+			<div class="qr-code-box" >
 				{#if qrCodeUrl}
-					<div class="qr-code-inner animate-pulse">
+					<div class="qr-code-inner animate-pulse" data-testid="qr-code">
 						<QrCode value={qrCodeUrl} size={220} />
 					</div>
 				{:else}
