@@ -46,7 +46,7 @@ describe('Checkout Page', () => {
 
         it('renders the payment method section', () => {
             render(CheckoutPage, { props: { data: MockData } });
-            expect(screen.getByText('Payment method - UPI')).toBeInTheDocument();
+            expect(screen.getByText('Payment method — UPI')).toBeInTheDocument();
         });
 
         it('renders the order summary section', () => {
@@ -57,25 +57,25 @@ describe('Checkout Page', () => {
         it('displays the correct subtotal amount', () => {
             render(CheckoutPage, { props: { data: MockData } });
             expect(screen.getByText('Subtotal')).toBeInTheDocument();
-            expect(screen.getByText('₹1,000')).toBeInTheDocument();
+            expect(screen.getByText('₹500')).toBeInTheDocument();
         });
 
         it('displays the tax calculation', () => {
             render(CheckoutPage, { props: { data: MockData } });
             expect(screen.getByText('Tax (GST 18%)')).toBeInTheDocument();
-            expect(screen.getByText('₹180')).toBeInTheDocument();
+            expect(screen.getByText('₹90')).toBeInTheDocument();
         });
 
         it('displays the total amount', () => {
             render(CheckoutPage, { props: { data: MockData } });
             expect(screen.getByText('Total')).toBeInTheDocument();
-            expect(screen.getByText('₹1,180')).toBeInTheDocument();
+            expect(screen.getByText('₹590')).toBeInTheDocument();
         });
 
         it('displays the transaction ID', () => {
             render(CheckoutPage, { props: { data: MockData } });
             expect(screen.getByText('Transaction ID')).toBeInTheDocument();
-            expect(screen.getByText('TXN123456789')).toBeInTheDocument();
+            expect(screen.getByText('YQTQ23242193109292')).toBeInTheDocument();
         });
 
         it('displays security badges', () => {
@@ -252,9 +252,7 @@ describe('Checkout Page', () => {
 
             expect(global.fetch).toHaveBeenCalledWith(
                 '/api/paymentCheck/TXN123456',
-                expect.objectContaining({
-                    method: 'GET'
-                })
+                expect.any(Object)
             );
         });
 

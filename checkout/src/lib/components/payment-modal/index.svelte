@@ -6,7 +6,8 @@
 		transactionStatus = $bindable(),
 		paymentData = $bindable(),
 		inputUpiId = $bindable(),
-		timeRemaining = $bindable()
+		timeRemaining = $bindable(),
+		onClose
 	}: {
 		showModal: boolean;
 		transactionStatus: 'PENDING' | 'SUCCESS' | 'FAILED' | 'EXPIRED';
@@ -14,10 +15,12 @@
 		qrData?: QRPaymentStatusResponse;
 		inputUpiId?: string;
 		timeRemaining?: string;
+		onClose?: () => void;
 	} = $props();
 
 	function closeModal() {
 		showModal = false;
+		if (onClose) onClose();
 	}
 </script>
 

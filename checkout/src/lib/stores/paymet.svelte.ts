@@ -72,7 +72,7 @@ export function createPaymentStore() {
 			});
 
 			const data = await response.json();
-
+			console.log(data);
 			if (data.success) {
 				isVerified = true;
 				verificationMessage = data.message || 'UPI ID verified successfully!';
@@ -117,6 +117,7 @@ export function createPaymentStore() {
 			});
 
 			const data = await response.json();
+			console.log(data);
 
 			if (data.success) {
 				paymentData = data.data as PayinInitiateStatusResponse;
