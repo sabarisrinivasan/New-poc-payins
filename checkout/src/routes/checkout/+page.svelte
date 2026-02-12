@@ -1,202 +1,56 @@
 <script lang="ts">
 	import type { PageData } from './$types';
 	import { createPaymentStore } from '$lib/stores/paymet.svelte';
+	import { createQRPaymentStore } from '$lib/stores/qr-payment.svelte';
+	import { createAppIntentPaymentStore, type UpiApp } from '$lib/stores/app-intent-payment.svelte';
 	import UpiInput from '$lib/components/upi-input.svelte';
 	import PaymentButton from '$lib/components/payment-button.svelte';
 	import PaymentModal from '$lib/components/payment-modal.svelte';
 	import QrCodePayment from '$lib/components/qr-code-payment.svelte';
 	import type { QRPaymentStatusResponse } from '$lib/utils/types';
+	import type { PaymentCheckoutToken } from '$lib/utils/types';
 	import Modal from '$lib/components/modal.svelte';
-
+	import { onMount } from 'svelte';
+	import GooglePay from '$lib/icons/google-pay.svelte';
+	import PhonePe from '$lib/icons/phone-pe.svelte';
+	import Paytm from '$lib/icons/paytm.svelte';
+	import Bhim from '$lib/icons/bhim.svelte';
+	import AmazonPay from '$lib/icons/amazon-pay.svelte';
 	let { data }: { data: PageData } = $props();
-	// State for payment method selection
 	$inspect(data);
-	let tokenData = $derived(data.data);
-	// Static dummy data for UI display only
-	// const qrCodeUrl = 'upi://pay?pa=merchant@upi&pn=MerchantName&am=1000&cu=INR';
-	const session = {
-		transactionAmount: 1000,
-		orderId: 'TXN123456789'
-	};
-	const totalAmount = session.transactionAmount * 1.18;
 
-	let qrFlag = $state(false);
-	let successModal = $state(false);
-	let loading = $state(false);
-	let error: string | null = $state(null);
-	let isCheckingStatus = $state(false);
-	let timeRemaining = $state('0:00');
-	let pollTick = 0;
-	let pollingInterval: NodeJS.Timeout | null = null;
-	let transactionStatus = $state<string | undefined>(undefined);
-	let paymentData = $state<QRPaymentStatusResponse | null>(null);
-	let showModal = $state(false);
+	let tokenData = $derived(data.data as PaymentCheckoutToken | undefined);
 
-	function formatTime(ms: number): string {
-		const minutes = Math.floor(ms / 60000);
-		const seconds = Math.floor((ms % 60000) / 1000);
-		return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-	}
+	let txnAmount = $derived(parseFloat(tokenData?.transactionAmount ?? '0'));
+	let gstAmount = $derived(txnAmount * 0.18);
+	let totalAmount = $derived(txnAmount + gstAmount);
 
-	$effect(() => {
-		return () => {
-			if (pollingInterval) {
-				clearInterval(pollingInterval);
-			}
+	let isMobile = $state(false);
+
+	onMount(() => {
+		const checkMobile = () => {
+			isMobile = /Android|iPhone|iPad|iPod|Opera Mini|IEMobile|WPDesktop/i.test(
+				navigator.userAgent
+			);
 		};
+		checkMobile();
+		window.addEventListener('resize', checkMobile);
+		return () => window.removeEventListener('resize', checkMobile);
 	});
 
-	function handlePaymentSuccess(data: QRPaymentStatusResponse) {
-		transactionStatus = 'SUCCESS';
-		console.log('Payment completed successfully:', data);
-	}
+	const upiApps: UpiApp[] = [
+		{ id: 'gpay', name: 'Google Pay', prefix: 'tez:/', icon: GooglePay, color: '#4285F4' },
+		{ id: 'phonepe', name: 'PhonePe', prefix: 'phonepe:/', icon: PhonePe, color: '#5F259F' },
+		{ id: 'paytm', name: 'Paytm', prefix: 'paytmmp:/', icon: Paytm, color: '#00B9F1' },
+		{ id: 'bhim', name: 'BHIM', prefix: 'upi:/', icon: Bhim, color: '#FF6600' },
+		{ id: 'amazon', name: 'Amazon Pay', prefix: 'amazonpay:/', icon: AmazonPay, color: '#FF9900' }
+		// { id: 'other', name: 'Other UPI', prefix: 'upi:/', icon: '📱', color: '#667eea' }
+	];
 
-	function handlePaymentFailure(data: QRPaymentStatusResponse) {
-		transactionStatus = 'FAILED';
-		console.log('Payment failed:', data);
-	}
-
-	function handlePaymentTimeout() {
-		transactionStatus = 'EXPIRED';
-		console.log('Payment timeout');
-	}
-	function startPolling(txnId: string, expiresAt: number) {
-		stopPolling(); // safety
-		isCheckingStatus = true;
-		pollTick = 0;
-		pollingInterval = setInterval(async () => {
-			const now = Date.now();
-			const remaining = expiresAt - now;
-
-			// ⏱ countdown
-			if (remaining <= 0) {
-				timeRemaining = '0:00';
-				stopPolling();
-				handlePaymentTimeout();
-				return;
-			}
-
-			timeRemaining = formatTime(remaining);
-			console.log('Time remaining:', timeRemaining);
-			// 🔁 poll backend every 3 seconds
-			pollTick++;
-			if (pollTick % 3 !== 0) return;
-
-			await checkPaymentStatus(txnId);
-		}, 1000);
-
-		// initial check immediately
-		checkPaymentStatus(txnId);
-	}
-	function stopPolling() {
-		if (pollingInterval) {
-			clearInterval(pollingInterval);
-			pollingInterval = null;
-		}
-		isCheckingStatus = false;
-	}
-	const handleGenerateQr = async () => {
-		loading = true;
-		error = null;
-
-		try {
-			const response = await fetch('/api/upi-intent', {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json'
-				},
-				body: JSON.stringify({
-					transactionAmount: tokenData?.transactionAmount,
-					currency: tokenData?.currency || 'INR',
-					customerPhoneNumber: tokenData?.customerPhoneNumber,
-					customerEmail: tokenData?.customerEmail,
-					orderId: tokenData?.orderId,
-					callBackUrl: tokenData?.merchantRedirectUrl,
-					orgId: Number(tokenData?.orgId),
-					checkoutId: tokenData?.jti,
-					mode: 'DYNAMIC_SECURE_QR',
-					source: 'WEB',
-					clientDescription: 'hello'
-				})
-			});
-
-			const result = await response.json();
-
-			if (result.success) {
-				qrFlag = true;
-				paymentData = result.data as QRPaymentStatusResponse;
-				console.log('QR generation successful:', paymentData);
-				if (paymentData?.transactionStatus === 'PENDING') {
-					console.log(
-						'Initiating payment status polling for transaction:',
-						paymentData.transactionId
-					);
-					startPolling(paymentData.transactionId, paymentData.expiresAt);
-				} else if (paymentData?.transactionStatus === 'SUCCESS') {
-					handlePaymentSuccess(paymentData);
-				}
-			} else {
-				error = result.message || 'Failed to generate QR';
-				qrFlag = false;
-			}
-		} catch (err) {
-			console.error('Error generating QR:', err);
-			error = 'An error occurred while generating QR';
-			qrFlag = false;
-		} finally {
-			loading = false;
-		}
-	};
-
-	async function checkPaymentStatus(txnId: string) {
-		if (!isCheckingStatus) return;
-
-		try {
-			const response = await fetch(`/api/paymentCheck/${txnId}`, {
-				method: 'GET',
-				headers: { 'Content-Type': 'application/json' }
-			});
-
-			const data = await response.json();
-			if (!data.success) return;
-
-			const statusData = data.data;
-			transactionStatus = statusData.transactionStatus || statusData.status;
-
-			paymentData = paymentData ? { ...paymentData, ...statusData } : statusData;
-
-			if (transactionStatus === 'SUCCESS') {
-				console.log('Payment successful:', statusData);
-				successModal = true;
-				stopPolling();
-				handlePaymentSuccess(statusData);
-			} else if (transactionStatus === 'FAILED') {
-				stopPolling();
-				handlePaymentFailure(statusData);
-			}
-		} catch (error) {
-			console.error('Error checking payment status:', error);
-		}
-	}
-
-	const store = createPaymentStore();
-
-	const handleBack = () => {
-		// Show confirmation modal instead of directly going back
-		showModal = true;
-	};
-
-	const handleConfirmBack = () => {
-		// User confirmed they want to go back
-		qrFlag = false;
-		stopPolling();
-		showModal = false;
-	};
-
-	const handleCancelBack = () => {
-		// User wants to stay on QR page
-		showModal = false;
-	};
+	//Stores
+	const upiStore = createPaymentStore();
+	const qrStore = createQRPaymentStore();
+	const appIntentStore = createAppIntentPaymentStore();
 </script>
 
 <main class="min-h-screen py-8 px-4 sm:px-6 lg:px-8">
@@ -213,87 +67,194 @@
 		<div class="grid lg:grid-cols-2 gap-8">
 			<!-- Payment Form -->
 			<div class="animate-slide-up">
-				{#if qrFlag}
+				{#if qrStore.qrFlag}
+					<!-- Desktop QR view -->
 					<QrCodePayment
-						countdown={timeRemaining}
-						qrCodeUrl={paymentData?.intentUrl}
-						onBack={handleBack}
+						countdown={qrStore.timeRemaining}
+						qrCodeUrl={qrStore.paymentData?.intentUrl}
+						onBack={qrStore.handleBack}
 					/>
 				{:else}
 					<div class="payment-card">
 						<h2 class="text-xl font-semibold mb-6" style="color: var(--color-text-primary);">
-							Payment method - UPI
+							Payment method — UPI
 						</h2>
 
-						<!-- Payment Method Toggle -->
-						<!-- <PaymentToggleMethod
-						paymentMethod={store.paymentMethod}
-						onMethodChange={(method) => (store.paymentMethod = method)}
-					/> -->
+						<!-- ════════════════════════════════════════════════════════
+						     MOBILE: UPI App Selection → Proceed to Pay
+						     ════════════════════════════════════════════════════════ -->
+						{#if isMobile}
+							<div class="mb-10">
+								<p class="font-medium mb-1" style="color: var(--color-text-primary);">
+									Pay using your UPI app
+								</p>
+								<p class="select-hint">Select an app to continue</p>
 
-						<!-- UPI ID Input Section -->
-
-						<div class="mb-10">
-							<h1 class="font-medium text-gray-900 mb-3">Pay by any UPI app</h1>
-							<button onclick={handleGenerateQr} class="generate-qr-button" disabled={loading}>
-								{#if loading}
-									<svg class="spinner" viewBox="0 0 24 24">
-										<circle
-											class="spinner-circle"
-											cx="12"
-											cy="12"
-											r="10"
-											stroke="currentColor"
-											stroke-width="4"
-											fill="none"
-										/>
-									</svg>
-									<span>Generating QR...</span>
-								{:else}
-									<svg class="qr-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											stroke-width="2"
-											d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 0 00-1-1H5a1 0 00-1 1v2a1 0 001 1zm12 0h2a1 1 0 001-1V5a1 0 00-1-1h-2a1 0 00-1 1v2a1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 0 00-1-1H5a1 0 00-1 1v2a1 0 001 1z"
-										/>
-									</svg>
-									<span>Generate QR Code</span>
-								{/if}
-							</button>
-							{#if error}
-								<div class="error-message animate-scale-in">
-									<svg class="error-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											stroke-width="2"
-											d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-										/>
-									</svg>
-									<span>{error}</span>
+								<!-- App selection grid -->
+								<div class="upi-app-grid">
+									{#each upiApps as app}
+										<button
+											class="upi-app-btn"
+											class:selected={appIntentStore.selectedApp?.id === app.id}
+											style="--app-color: {app.color};"
+											onclick={() => appIntentStore.selectApp(app)}
+											disabled={appIntentStore.isProceeding}
+											aria-label="Select {app.name}"
+											aria-pressed={appIntentStore.selectedApp?.id === app.id}
+										>
+											<span class="app-icon"> <svelte:component this={app.icon} /></span>
+											<span class="app-name">{app.name}</span>
+											{#if appIntentStore.selectedApp?.id === app.id}
+												<span class="selected-badge" aria-hidden="true">
+													<svg viewBox="0 0 12 12" fill="none">
+														<circle cx="6" cy="6" r="6" fill="var(--app-color)" />
+														<path
+															d="M3 6l2 2 4-4"
+															stroke="#fff"
+															stroke-width="1.5"
+															stroke-linecap="round"
+															stroke-linejoin="round"
+														/>
+													</svg>
+												</span>
+											{/if}
+										</button>
+									{/each}
 								</div>
-							{/if}
-						</div>
-						<div class="border mb-10"></div>
-						<UpiInput
-							bind:inputUpiId={store.inputUpiId}
-							upiError={store.upiError}
-							isVerified={store.isVerified}
-							verificationMessage={store.verificationMessage}
-						/>
 
-						<!-- {#if store.paymentMethod === 'qr-code'}
-						<QrCodePayment {qrCodeUrl} />
-					{/if} -->
+								<!-- Selected app summary bar -->
+								{#if appIntentStore.selectedApp}
+									<div class="selected-bar">
+										<span class="selected-bar-icon">
+											<svelte:component this={appIntentStore.selectedApp.icon} /></span
+										>
+										<span class="selected-bar-text">
+											Paying with <strong>{appIntentStore.selectedApp.name}</strong>
+										</span>
+									</div>
+
+									<!-- Proceed to Pay CTA -->
+									<button
+										class="proceed-btn"
+										style="--app-color: {appIntentStore.selectedApp.color};"
+										onclick={() => tokenData && appIntentStore.proceedToPayment(tokenData)}
+										disabled={appIntentStore.isProceeding}
+									>
+										{#if appIntentStore.isProceeding}
+											<svg class="spinner" viewBox="0 0 24 24">
+												<circle
+													class="spinner-circle"
+													cx="12"
+													cy="12"
+													r="10"
+													stroke="currentColor"
+													stroke-width="4"
+													fill="none"
+												/>
+											</svg>
+											<span>Processing…</span>
+										{:else}
+											<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													stroke-width="2"
+													d="M17 8l4 4m0 0l-4 4m4-4H3"
+												/>
+											</svg>
+											<span>Proceed to Pay ₹{txnAmount.toLocaleString('en-IN')}</span>
+										{/if}
+									</button>
+								{/if}
+
+								{#if appIntentStore.error}
+									<div class="error-message animate-scale-in">
+										<svg class="error-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+												d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+											/>
+										</svg>
+										<span>{appIntentStore.error}</span>
+									</div>
+								{/if}
+							</div>
+
+							<!-- ════════════════════════════════════════════════════════
+						     DESKTOP: Generate QR Code Button
+						     ════════════════════════════════════════════════════════ -->
+						{:else}
+							<div class="mb-10">
+								<h3 class="font-medium mb-3" style="color: var(--color-text-primary);">
+									Pay by any UPI app
+								</h3>
+								<button
+									onclick={() => tokenData && qrStore.generateQR(tokenData)}
+									class="generate-qr-button"
+									disabled={qrStore.loading}
+								>
+									{#if qrStore.loading}
+										<svg class="spinner" viewBox="0 0 24 24">
+											<circle
+												class="spinner-circle"
+												cx="12"
+												cy="12"
+												r="10"
+												stroke="currentColor"
+												stroke-width="4"
+												fill="none"
+											/>
+										</svg>
+										<span>Generating QR...</span>
+									{:else}
+										<svg class="qr-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+												d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 0 00-1-1H5a1 0 00-1 1v2a1 0 001 1zm12 0h2a1 1 0 001-1V5a1 0 00-1-1h-2a1 0 00-1 1v2a1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 0 00-1-1H5a1 0 00-1 1v2a1 0 001 1z"
+											/>
+										</svg>
+										<span>Generate QR Code</span>
+									{/if}
+								</button>
+
+								{#if qrStore.error}
+									<div class="error-message animate-scale-in">
+										<svg class="error-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+												d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+											/>
+										</svg>
+										<span>{qrStore.error}</span>
+									</div>
+								{/if}
+							</div>
+						{/if}
+
+						<div class="border mb-10"></div>
+
+						<!-- UPI ID manual entry (same for both mobile & desktop) -->
+						<UpiInput
+							bind:inputUpiId={upiStore.inputUpiId}
+							upiError={upiStore.upiError}
+							isVerified={upiStore.isVerified}
+							verificationMessage={upiStore.verificationMessage}
+						/>
 
 						<PaymentButton
-							isVerified={store.isVerified}
-							onclick={() => tokenData && store.handleSubmit(tokenData)}
-							isValid={store.isValid}
-							isVerifying={store.isVerifying}
-							isInitiatingPayment={store.isInitiatingPayment}
+							isVerified={upiStore.isVerified}
+							onclick={() => tokenData && upiStore.handleSubmit(tokenData)}
+							isValid={upiStore.isValid}
+							isVerifying={upiStore.isVerifying}
+							isInitiatingPayment={upiStore.isInitiatingPayment}
 						/>
+
 						<!-- Security Badges -->
 						<div class="security-badges">
 							<div class="badge">
@@ -329,11 +290,10 @@
 					<h2 class="text-xl font-semibold mb-6" style="color: var(--color-text-primary);">
 						Order summary
 					</h2>
-
 					<div class="space-y-4 mb-6">
 						<div class="summary-item">
 							<span>Subtotal</span>
-							<span>₹{session.transactionAmount.toLocaleString('en-IN')}</span>
+							<span>₹{txnAmount.toLocaleString('en-IN')}</span>
 						</div>
 						<div class="summary-item">
 							<span>Processing fee</span>
@@ -341,7 +301,7 @@
 						</div>
 						<div class="summary-item">
 							<span>Tax (GST 18%)</span>
-							<span>₹{(session.transactionAmount * 0.18).toLocaleString('en-IN')}</span>
+							<span>₹{gstAmount.toLocaleString('en-IN')}</span>
 						</div>
 						<div class="divider"></div>
 						<div class="summary-item total">
@@ -362,7 +322,7 @@
 						<div>
 							<p class="font-medium mb-1">Transaction ID</p>
 							<p class="text-sm" style="color: var(--color-text-tertiary); font-family: monospace;">
-								{session.orderId}
+								{tokenData?.orderId ?? '—'}
 							</p>
 						</div>
 					</div>
@@ -394,12 +354,13 @@
 		</div>
 	</div>
 </main>
-{#if store.paymentData}
+
+{#if upiStore.paymentData}
 	<PaymentModal
-		inputUpiId={store.inputUpiId}
-		paymentData={store.paymentData}
-		showModal={store.showModal}
-		transactionStatus={(store.transactionStatus ?? 'PENDING') as
+		inputUpiId={upiStore.inputUpiId}
+		paymentData={upiStore.paymentData}
+		showModal={upiStore.showModal}
+		transactionStatus={(upiStore.transactionStatus ?? 'PENDING') as
 			| 'PENDING'
 			| 'SUCCESS'
 			| 'FAILED'
@@ -407,18 +368,42 @@
 	/>
 {/if}
 
-<PaymentModal
-	showModal={successModal}
-	transactionStatus={(transactionStatus ?? 'PENDING') as
-		| 'PENDING'
-		| 'SUCCESS'
-		| 'FAILED'
-		| 'EXPIRED'}
-></PaymentModal>
+{#if appIntentStore.showPaymentStatusModal}
+	<PaymentModal
+		bind:showModal={appIntentStore.showPaymentStatusModal}
+		transactionStatus={(appIntentStore.transactionStatus ?? 'PENDING') as
+			| 'PENDING'
+			| 'SUCCESS'
+			| 'FAILED'
+			| 'EXPIRED'}
+		paymentData={appIntentStore.paymentData ?? undefined}
+		timeRemaining={appIntentStore.timeRemaining}
+		onClose={() => appIntentStore.closePaymentStatusModal()}
+	/>
+{/if}
 
-<Modal bind:isOpen={showModal} onConfirm={handleConfirmBack} onCancel={handleCancelBack} />
+{#if qrStore.showPaymentStatusModal}
+	<PaymentModal
+		bind:showModal={qrStore.showPaymentStatusModal}
+		transactionStatus={(qrStore.transactionStatus ?? 'PENDING') as
+			| 'PENDING'
+			| 'SUCCESS'
+			| 'FAILED'
+			| 'EXPIRED'}
+		paymentData={qrStore.paymentData ?? undefined}
+		timeRemaining={qrStore.timeRemaining}
+		onClose={() => qrStore.closePaymentStatusModal()}
+	/>
+{/if}
+
+<Modal
+	bind:isOpen={qrStore.showExitConfirmation}
+	onConfirm={qrStore.handleConfirmBack}
+	onCancel={qrStore.handleCancelBack}
+/>
 
 <style>
+	/* ── existing styles (unchanged) ───────────────────────────────────────── */
 	.payment-card {
 		background: var(--color-card);
 		border-radius: var(--radius-xl);
@@ -427,25 +412,12 @@
 		border: 1px solid var(--color-border);
 		transition: all var(--transition-base);
 	}
-
 	.payment-card:hover {
 		box-shadow: var(--shadow-lg);
 	}
-
 	.summary-card {
 		position: sticky;
 		top: 2rem;
-	}
-
-	@keyframes fadeIn {
-		from {
-			opacity: 0;
-			transform: translateY(10px);
-		}
-		to {
-			opacity: 1;
-			transform: translateY(0);
-		}
 	}
 
 	.security-badges {
@@ -455,7 +427,6 @@
 		padding-top: var(--spacing-lg);
 		border-top: 1px solid var(--color-border);
 	}
-
 	.badge {
 		display: flex;
 		align-items: center;
@@ -463,7 +434,6 @@
 		font-size: 12px;
 		color: var(--color-text-tertiary);
 	}
-
 	.summary-item {
 		display: flex;
 		justify-content: space-between;
@@ -471,19 +441,16 @@
 		font-size: 15px;
 		color: var(--color-text-secondary);
 	}
-
 	.summary-item.total {
 		font-size: 18px;
 		font-weight: 600;
 		color: var(--color-text-primary);
 	}
-
 	.divider {
 		height: 1px;
 		background: var(--color-border);
 		margin: var(--spacing-md) 0;
 	}
-
 	.info-box {
 		display: flex;
 		gap: var(--spacing-sm);
@@ -492,14 +459,13 @@
 		border-radius: var(--radius-md);
 		color: var(--color-text-secondary);
 	}
-
 	@media (max-width: 1024px) {
 		.summary-card {
 			position: static;
 		}
 	}
 
-	/* Generate QR Button */
+	/* ── Desktop: Generate QR button (unchanged) ────────────────────────── */
 	.generate-qr-button {
 		width: 100%;
 		margin-top: var(--spacing-md);
@@ -518,38 +484,186 @@
 		gap: 10px;
 		box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
 	}
-
 	.generate-qr-button:hover:not(:disabled) {
 		transform: translateY(-2px);
 		box-shadow: 0 6px 25px rgba(102, 126, 234, 0.5);
 	}
-
 	.generate-qr-button:active:not(:disabled) {
 		transform: translateY(0);
 	}
-
 	.generate-qr-button:disabled {
 		cursor: not-allowed;
 		opacity: 0.7;
 	}
-
 	.qr-icon {
 		width: 24px;
 		height: 24px;
 	}
 
+	/* ── Mobile: UPI App Grid ────────────────────────────────────────────── */
+	.select-hint {
+		font-size: 13px;
+		color: var(--color-text-tertiary);
+		margin-bottom: 14px;
+	}
+
+	.upi-app-grid {
+		display: grid;
+		grid-template-columns: repeat(3, 1fr);
+		gap: 10px;
+		margin-top: 4px;
+	}
+
+	.upi-app-btn {
+		position: relative;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 7px;
+		padding: 14px 8px 12px;
+		border: 2px solid var(--color-border, #e5e7eb);
+		border-radius: var(--radius-lg);
+		background: var(--color-card, #fff);
+		cursor: pointer;
+		transition:
+			border-color 0.18s ease,
+			box-shadow 0.18s ease,
+			transform 0.15s ease;
+		font-size: 12px;
+		font-weight: 500;
+		color: var(--color-text-primary);
+	}
+
+	.upi-app-btn:hover:not(:disabled):not(.selected) {
+		border-color: var(--app-color);
+		transform: translateY(-1px);
+		box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
+	}
+
+	/* ✅ Selected state */
+	.upi-app-btn.selected {
+		border-color: var(--app-color);
+		background: color-mix(in srgb, var(--app-color) 8%, var(--color-card, #fff));
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-color) 20%, transparent);
+		transform: none;
+	}
+
+	.upi-app-btn:disabled {
+		opacity: 0.55;
+		cursor: not-allowed;
+	}
+
+	.app-icon {
+		font-size: 26px;
+		line-height: 1;
+	}
+	.app-name {
+		font-size: 11px;
+		text-align: center;
+		line-height: 1.3;
+	}
+
+	/* checkmark badge in top-right corner */
+	.selected-badge {
+		position: absolute;
+		top: 6px;
+		right: 6px;
+		width: 16px;
+		height: 16px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+	.selected-badge svg {
+		width: 100%;
+		height: 100%;
+	}
+
+	/* ── Selected-app summary bar ────────────────────────────────────────── */
+	.selected-bar {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		margin-top: 14px;
+		padding: 10px 14px;
+		border-radius: var(--radius-md);
+		background: var(--color-bg, #f8f9fa);
+		border: 1px solid var(--color-border, #e5e7eb);
+		font-size: 14px;
+		color: var(--color-text-secondary);
+		animation: slideDown 0.2s ease;
+	}
+	.selected-bar-icon {
+		font-size: 20px;
+	}
+	.selected-bar-text strong {
+		color: var(--color-text-primary);
+	}
+
+	/* ── Proceed to Pay button ───────────────────────────────────────────── */
+	.proceed-btn {
+		width: 100%;
+		margin-top: 12px;
+		padding: 15px 20px;
+		border: none;
+		border-radius: var(--radius-lg);
+		background: var(--app-color, #667eea);
+		color: #fff;
+		font-size: 16px;
+		font-weight: 600;
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 10px;
+		box-shadow: 0 4px 14px color-mix(in srgb, var(--app-color, #667eea) 45%, transparent);
+		transition:
+			opacity 0.15s ease,
+			transform 0.15s ease,
+			box-shadow 0.15s ease;
+		animation: slideDown 0.22s ease;
+	}
+	.proceed-btn:hover:not(:disabled) {
+		opacity: 0.92;
+		transform: translateY(-1px);
+		box-shadow: 0 6px 20px color-mix(in srgb, var(--app-color, #667eea) 50%, transparent);
+	}
+	.proceed-btn:active:not(:disabled) {
+		transform: translateY(0);
+	}
+	.proceed-btn:disabled {
+		opacity: 0.65;
+		cursor: not-allowed;
+	}
+
+	@keyframes slideDown {
+		from {
+			opacity: 0;
+			transform: translateY(-6px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
+	}
+
+	/* ── Shared: spinner ─────────────────────────────────────────────────── */
 	.spinner {
 		width: 20px;
 		height: 20px;
 		animation: spin 1s linear infinite;
 	}
-
 	.spinner-circle {
 		stroke-dasharray: 60;
 		stroke-dashoffset: 0;
 		animation: spinCircle 1.5s ease-in-out infinite;
 	}
-
+	@keyframes spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
 	@keyframes spinCircle {
 		0% {
 			stroke-dashoffset: 60;
@@ -562,7 +676,7 @@
 		}
 	}
 
-	/* Error Message */
+	/* ── Shared: error message ───────────────────────────────────────────── */
 	.error-message {
 		margin-top: var(--spacing-md);
 		padding: 12px 16px;
@@ -575,7 +689,6 @@
 		align-items: center;
 		gap: 8px;
 	}
-
 	.error-icon {
 		width: 20px;
 		height: 20px;
