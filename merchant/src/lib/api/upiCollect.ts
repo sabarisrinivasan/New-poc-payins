@@ -6,7 +6,7 @@ export const postUpi = async () => {
 		customerPhoneNumber: '9305967058',
 		orgId: parseInt('10094'),
 		merchantRedirectUrl: 'http://localhost:5173/callback',
-		customerEmail:'vicky@gmail.com'
+		customerEmail: 'vicky@gmail.com'
 	};
 	try {
 		const response = await fetch(

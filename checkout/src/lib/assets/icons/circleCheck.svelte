@@ -1,11 +1,11 @@
 <script lang="ts">
-interface propType {
-	class?: string;
-	width?: string;
-	height?: string;
-	stroke?: string;
-}
-let {width,height,class:className,stroke}:propType=$props()
+	interface propType {
+		class?: string;
+		width?: string;
+		height?: string;
+		stroke?: string;
+	}
+	let { width, height, class: className, stroke }: propType = $props();
 </script>
 
 <svg
@@ -23,4 +23,3 @@ let {width,height,class:className,stroke}:propType=$props()
 		stroke-linejoin="round"
 	/>
 </svg>
-
