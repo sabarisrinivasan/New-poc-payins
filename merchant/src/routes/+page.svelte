@@ -141,7 +141,7 @@
 
 					<!-- Features -->
 					<div class="features-section">
-						{#each ['100% Organic Cotton', 'Free Shipping Worldwide', '30-Day Easy Returns'] as feature}
+						{#each ['100% Organic Cotton', 'Free Shipping Worldwide', '30-Day Easy Returns'] as  feature (feature)}
 							<div class="feature-item">
 								<svg class="feature-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
