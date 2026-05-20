@@ -13,7 +13,7 @@
 
 	let loading = $state(false);
 	let quantity = $state(1);
-	let unitPrice = $state(1000);
+	let unitPrice = $state(2);
 
 	// Customer info
 	let name = $state('');
@@ -46,8 +46,8 @@
 			city: 'Bengaluru',
 			state: 'Karnataka',
 			zipCode: '560038',
-			unitPrice: 1499,
-			quantity: 2
+			unitPrice: 2,
+			quantity: 1
 		},
 		{
 			name: 'Priya Nair',
@@ -58,7 +58,7 @@
 			city: 'Chennai',
 			state: 'Tamil Nadu',
 			zipCode: '600002',
-			unitPrice: 999,
+			unitPrice: 2,
 			quantity: 1
 		},
 		{
@@ -70,8 +70,8 @@
 			city: 'Mumbai',
 			state: 'Maharashtra',
 			zipCode: '400050',
-			unitPrice: 2499,
-			quantity: 3
+			unitPrice: 2,
+			quantity: 1
 		}
 	];
 

@@ -28,7 +28,7 @@ export const postUpi = async (params: UpiPayload) => {
 			country: 'India',
 			zipCode: params.zipCode
 		},
-		orgId: 10094,
+		orgId: 10001,
 		merchantUrl: {
 			successUrl: 'http://localhost:5173/callback',
 			failureUrl: 'http://localhost:5173/callback',
