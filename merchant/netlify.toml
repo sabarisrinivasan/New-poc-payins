@@ -1,0 +1,15 @@
+[build]
+  command = "npm run build"
+  publish = "dist"  # Vite's default is "dist", not "build"
+
+[context.production]
+  branch = "main"
+
+[build.environment]
+  NODE_VERSION = "18"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+netlify.toml
