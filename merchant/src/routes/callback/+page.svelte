@@ -143,7 +143,7 @@
 
 		<!-- Footer -->
 		<div class="footer">
-			<p>Powered by <span class="brand">Flipopay</span></p>
+			<p>Powered by <span class="brand">Jubiliantpay</span></p>
 		</div>
 	</div>
 </main>
