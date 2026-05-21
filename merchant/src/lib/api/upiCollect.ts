@@ -30,14 +30,14 @@ export const postUpi = async (params: UpiPayload) => {
 		},
 		orgId: 10001,
 		merchantUrl: {
-			successUrl: 'http://localhost:5173/callback',
-			failureUrl: 'http://localhost:5173/callback',
-			cancelUrl: 'http://localhost:5173/callback'
+			successUrl: `${import.meta.env.VITE_PUBLIC_SUCCESS_URL}`,
+			failureUrl: `${import.meta.env.VITE_PUBLIC_FAILURE_URL}`,
+			cancelUrl: `${import.meta.env.VITE_PUBLIC_CANCEL_URL}`
 		}
 	};
-	try {
+	try {	
 		const response = await fetch(
-			'https://ubs.jubiliantpay.com/api/v1/payins/checkout-session',
+			`${import.meta.env.VITE_PUBLIC_PAYIN_URL}`,
 			{
 				method: 'POST',
 				headers: {
