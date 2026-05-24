@@ -3,6 +3,7 @@
 	const url = page.url;
 	const status = url.searchParams.get('status');
 	const txnId = url.searchParams.get('paymentId');
+	// const paymentDateTime = url.searchParams.get('paymentDateTime');
 
 	const isSuccess = status === 'SUCCESS';
 	const isFailed = status === 'FAILED';

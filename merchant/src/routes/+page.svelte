@@ -38,7 +38,7 @@
 	// Prefill with random realistic test data
 	const testProfiles = [
 		{
-			name: 'Arjun Sharma',
+			name: 'John Doe ',
 			email: 'arjun.sharma@gmail.com',
 			phone: '9876543210',
 			addressLine1: '42 MG Road',
@@ -50,7 +50,7 @@
 			quantity: 1
 		},
 		{
-			name: 'Priya Nair',
+			name: 'Jane Doe ',
 			email: 'priya.nair@outlook.com',
 			phone: '9042173493',
 			addressLine1: '7 Anna Salai',
@@ -62,7 +62,7 @@
 			quantity: 1
 		},
 		{
-			name: 'Rahul Mehta',
+			name: 'Joe Schmoe',
 			email: 'rahul.mehta@yahoo.com',
 			phone: '9123456789',
 			addressLine1: '15 Linking Road',
@@ -103,7 +103,12 @@
 						<img src={Tshirt} alt="Premium Fine T-Shirt" class="product-image" />
 						<div class="image-badge">
 							<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									stroke-width="2"
+									d="M5 13l4 4L19 7"
+								/>
 							</svg>
 							Premium Quality
 						</div>
@@ -119,13 +124,7 @@
 					<div class="price-section">
 						<div class="price-row">
 							<span class="price-label">Unit Price (₹)</span>
-							<input
-								type="number"
-								class="price-input"
-								bind:value={unitPrice}
-								min="1"
-								step="1"
-							/>
+							<input type="number" class="price-input" bind:value={unitPrice} min="1" step="1" />
 						</div>
 						<div class="price-total">
 							<span class="total-label">Total</span>
@@ -135,16 +134,23 @@
 							</div>
 						</div>
 						{#if quantity > 1}
-							<div class="price-breakdown">₹{unitPrice.toLocaleString('en-IN')} × {quantity} items</div>
+							<div class="price-breakdown">
+								₹{unitPrice.toLocaleString('en-IN')} × {quantity} items
+							</div>
 						{/if}
 					</div>
 
 					<!-- Features -->
 					<div class="features-section">
-						{#each ['100% Organic Cotton', 'Free Shipping Worldwide', '30-Day Easy Returns'] as  feature (feature)}
+						{#each ['100% Organic Cotton', 'Free Shipping Worldwide', '30-Day Easy Returns'] as feature (feature)}
 							<div class="feature-item">
 								<svg class="feature-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2"
+										d="M5 13l4 4L19 7"
+									/>
 								</svg>
 								<span>{feature}</span>
 							</div>
@@ -155,15 +161,35 @@
 					<div class="quantity-section">
 						<span class="quantity-label">Quantity</span>
 						<div class="quantity-controls">
-							<button title="decrease" class="quantity-btn" onclick={decrementQuantity} disabled={quantity <= 1}>
+							<button
+								title="decrease"
+								class="quantity-btn"
+								onclick={decrementQuantity}
+								disabled={quantity <= 1}
+							>
 								<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2"
+										d="M20 12H4"
+									/>
 								</svg>
 							</button>
 							<span class="quantity-value">{quantity}</span>
-							<button title="increase" class="quantity-btn" onclick={incrementQuantity} disabled={quantity >= 10}>
+							<button
+								title="increase"
+								class="quantity-btn"
+								onclick={incrementQuantity}
+								disabled={quantity >= 10}
+							>
 								<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2"
+										d="M12 4v16m8-8H4"
+									/>
 								</svg>
 							</button>
 						</div>
@@ -177,7 +203,12 @@
 					<h2 class="checkout-title">Customer Details</h2>
 					<button type="button" class="prefill-btn" onclick={prefillRandom}>
 						<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+							/>
 						</svg>
 						Prefill Test Data
 					</button>
@@ -250,7 +281,9 @@
 						</div>
 
 						<div class="form-group full-width">
-							<label class="form-label" for="addressLine2">Address Line 2 <span class="optional">(optional)</span></label>
+							<label class="form-label" for="addressLine2"
+								>Address Line 2 <span class="optional">(optional)</span></label
+							>
 							<input
 								id="addressLine2"
 								name="addressLine2"
@@ -320,14 +353,24 @@
 
 					<button type="submit" class="purchase-btn" disabled={loading}>
 						<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"
+							/>
 						</svg>
 						<span>{loading ? 'Processing...' : `Pay ₹${totalAmount.toLocaleString('en-IN')}`}</span>
 					</button>
 
 					<div class="security-badge">
 						<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+							/>
 						</svg>
 						<span>Secure payment powered by <strong>Jubiliantpay</strong></span>
 					</div>
@@ -711,7 +754,9 @@
 		font-size: 14px;
 		color: var(--color-text-primary);
 		background: var(--color-bg);
-		transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+		transition:
+			border-color var(--transition-fast),
+			box-shadow var(--transition-fast);
 		width: 100%;
 	}
 
