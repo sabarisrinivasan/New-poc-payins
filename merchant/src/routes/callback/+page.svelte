@@ -175,11 +175,6 @@
 				</div>
 			{/if}
 		</div>
-
-		<!-- Footer -->
-		<div class="footer">
-			<p>Powered by <span class="brand">Jubiliantpay</span></p>
-		</div>
 	</div>
 </main>
 
@@ -449,24 +444,6 @@
 		color: var(--color-text-secondary);
 		margin: 0;
 		line-height: 1.6;
-	}
-
-	/* Footer */
-	.footer {
-		text-align: center;
-		margin-top: var(--spacing-lg);
-		padding-top: var(--spacing-lg);
-	}
-
-	.footer p {
-		font-size: 14px;
-		color: var(--color-text-tertiary);
-		margin: 0;
-	}
-
-	.brand {
-		font-weight: 700;
-		color: var(--color-primary);
 	}
 
 	/* Responsive */
