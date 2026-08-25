@@ -859,11 +859,6 @@
 		border-top: 1px solid var(--color-border);
 	}
 
-	.security-badge strong {
-		color: var(--color-primary);
-		font-weight: 700;
-	}
-
 	/* Responsive */
 	@media (max-width: 968px) {
 		.page-grid {

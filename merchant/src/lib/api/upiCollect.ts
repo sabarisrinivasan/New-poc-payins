@@ -1,4 +1,14 @@
-import { env } from '$env/dynamic/private';
+const PAYMENT_DESCRIPTIONS = [
+	'Fine T-Shirt purchase',
+	'Premium cotton apparel order',
+	'Online fashion purchase',
+	'Merchant product checkout'
+] as const;
+
+function getRandomPaymentDescription(): string {
+	const randomIndex = Math.floor(Math.random() * PAYMENT_DESCRIPTIONS.length);
+	return PAYMENT_DESCRIPTIONS[randomIndex];
+}
 
 export interface UpiPayload {
 	amount: string;
@@ -7,32 +17,39 @@ export interface UpiPayload {
 	phone: string;
 	city: string;
 	zipCode: string;
-	description: string;
 }
 
+const PAYMENT_METHODS = ['UPI', 'card', 'net_banking'] as const;
+
 interface PaymentOrderRequest {
+	orgId: string;
 	amount: string;
 	clientOrderId: string;
 	customer: {
+		phoneNumber: string;
+		name: string;
+		email: string;
 		city: string;
 		country: string;
-		email: string;
-		name: string;
-		phoneNumber: string;
 		zipCode: string;
 	};
-	description: string;
 	merchantUrl: {
+		successUrl: string;
 		cancelUrl: string;
 		failureUrl: string;
-		successUrl: string;
 	};
-	orgId: string;
+	description: string;
+	PaymentMethods: readonly string[];
+}
+
+function generateClientOrderId(): string {
+	const timestamp = Date.now().toString();
+	const random = crypto.getRandomValues(new Uint32Array(1))[0] % 100;
+	return `${timestamp}${random.toString().padStart(2, '0')}`;
 }
 
 export interface PaymentOrderResponse {
 	amount: string;
-	checkoutExpiry: string;
 	checkoutUrl: string;
 	clientOrderId: string;
 	message: string;
@@ -50,8 +67,8 @@ export class PaymentOrderError extends Error {
 	}
 }
 
-function getRequiredConfig(name: string, legacyName?: string): string {
-	const value = env[name] ?? (legacyName ? env[legacyName] : undefined);
+function getRequiredConfig(name: string): string {
+	const value = import.meta.env[name];
 
 	if (!value) {
 		throw new PaymentOrderError(`Missing server configuration: ${name}`, 500);
@@ -61,7 +78,7 @@ function getRequiredConfig(name: string, legacyName?: string): string {
 }
 
 function getOrderEndpoint(): string {
-	const baseUrl = getRequiredConfig('PAYIN_API_URL', 'VITE_PUBLIC_PAYIN_URL');
+	const baseUrl = getRequiredConfig('VITE_PUBLIC_PAYIN_URL');
 
 	try {
 		return new URL('/api/v1/payment/orders', baseUrl).toString();
@@ -98,7 +115,6 @@ function isPaymentOrderResponse(value: unknown): value is PaymentOrderResponse {
 	const response = value as Record<string, unknown>;
 	return [
 		'amount',
-		'checkoutExpiry',
 		'checkoutUrl',
 		'clientOrderId',
 		'message',
@@ -107,37 +123,42 @@ function isPaymentOrderResponse(value: unknown): value is PaymentOrderResponse {
 	].every((field) => typeof response[field] === 'string');
 }
 
+function isFailedOrderStatus(status: string): boolean {
+	return ['FAILED', 'FAILURE', 'ERROR'].includes(status.toUpperCase());
+}
+
 export async function postUpi(
 	params: UpiPayload,
 	fetcher: typeof fetch = fetch
 ): Promise<PaymentOrderResponse> {
 	const payload: PaymentOrderRequest = {
-		amount: params.amount,
-		clientOrderId: `ORDER-${crypto.randomUUID()}`,
+		orgId: getRequiredConfig('VITE_PAYIN_ORG_ID'),
+		amount: Number(params.amount).toFixed(2),
+		clientOrderId: generateClientOrderId(),
 		customer: {
-			city: params.city,
-			country: 'India',
-			email: params.email,
-			name: params.name,
 			phoneNumber: params.phone,
+			name: params.name,
+			email: params.email,
+			city: params.city,
+			country: 'IND',
 			zipCode: params.zipCode
 		},
-		description: params.description,
 		merchantUrl: {
-			cancelUrl: getRequiredConfig('PAYIN_CANCEL_URL', 'VITE_PUBLIC_CANCEL_URL'),
-			failureUrl: getRequiredConfig('PAYIN_FAILURE_URL', 'VITE_PUBLIC_FAILURE_URL'),
-			successUrl: getRequiredConfig('PAYIN_SUCCESS_URL', 'VITE_PUBLIC_SUCCESS_URL')
+			successUrl: getRequiredConfig('VITE_PUBLIC_SUCCESS_URL'),
+			cancelUrl: getRequiredConfig('VITE_PUBLIC_CANCEL_URL'),
+			failureUrl: getRequiredConfig('VITE_PUBLIC_FAILURE_URL')
 		},
-		orgId: env.PAYIN_ORG_ID ?? '10001'
+		description: getRandomPaymentDescription(),
+		PaymentMethods: PAYMENT_METHODS
 	};
 
 	const endpoint = getOrderEndpoint();
 	const headers = {
 		'Content-Type': 'application/json',
-		'X-Client-Key': getRequiredConfig('PAYIN_CLIENT_KEY'),
-		'X-Client-Secret': getRequiredConfig('PAYIN_CLIENT_SECRET')
+		'X-Client-Key': getRequiredConfig('VITE_PAYIN_CLIENT_KEY'),
+		'X-Client-Secret': getRequiredConfig('VITE_PAYIN_CLIENT_SECRET')
 	};
-	const debugLogsEnabled = env.PAYIN_DEBUG_LOGS === 'true';
+	const debugLogsEnabled = import.meta.env.VITE_PAYIN_DEBUG_LOGS === 'true';
 
 	if (debugLogsEnabled) {
 		console.info('Payment order API request:', {
@@ -180,7 +201,7 @@ export async function postUpi(
 		throw new PaymentOrderError('Payment service returned an invalid order response', 502);
 	}
 
-	if (data.status.toUpperCase() === 'FAILED' || !data.checkoutUrl.trim()) {
+	if (isFailedOrderStatus(data.status) || !data.checkoutUrl.trim()) {
 		if (debugLogsEnabled) {
 			console.error('Payment order API error response:', data);
 		}

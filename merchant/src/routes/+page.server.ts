@@ -29,8 +29,7 @@ export const actions: Actions = {
 					email: getRequiredField(formData, 'email'),
 					phone: getRequiredField(formData, 'phone'),
 					city: getRequiredField(formData, 'city'),
-					zipCode: getRequiredField(formData, 'zipCode'),
-					description: 'Fine T-Shirt purchase'
+					zipCode: getRequiredField(formData, 'zipCode')
 				},
 				fetch
 			);
