@@ -2,9 +2,12 @@
 	import { page } from '$app/state';
 	const url = page.url;
 	const status = url.searchParams.get('status');
-	const txnId = url.searchParams.get('txn_id');
+	const txnId = url.searchParams.get('paymentId');
+	// const paymentDateTime = url.searchParams.get('paymentDateTime');
 
-	const isSuccess = status === 'success';
+	const isSuccess = status === 'SUCCESS';
+	const isFailed = status === 'FAILED';
+	const isCancelled = !isSuccess && !isFailed;
 </script>
 
 <main class="min-h-screen flex items-center justify-center p-4">
@@ -93,6 +96,38 @@
 					</svg>
 					<p>A confirmation email has been sent to your registered email address.</p>
 				</div>
+			{:else if isCancelled}
+				<!-- Cancel State -->
+				<div class="cancel-icon-wrapper w-full flex justify-center mb-6">
+					<div class="  cancel-circle flex items-center justify-center">
+						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-ban-icon lucide-ban"><circle cx="12" cy="12" r="10"/><path d="M4.929 4.929 19.07 19.071"/></svg>
+					</div>
+				</div>
+
+				<h1 class="title cancel">Payment Cancelled</h1>
+				<p class="subtitle">You cancelled the payment. No amount was deducted.</p>
+
+				<div class="details-card">
+					<div class="detail-row">
+						<span class="detail-label">Transaction ID</span>
+						<span class="detail-value">{txnId || 'N/A'}</span>
+					</div>
+					<div class="detail-row">
+						<span class="detail-label">Status</span>
+						<span class="status-badge cancel">Cancelled</span>
+					</div>
+				</div>
+
+				<div class="action-buttons">
+					<button class="btn-primary" onclick={() => (window.location.href = '/')}>
+						Try Again
+					</button>
+					<button class="btn-secondary" onclick={() => window.history.back()}> Go Back </button>
+				</div>
+
+				<div class="info-box neutral">
+					<p>You can retry the payment anytime. No charges were made.</p>
+				</div>
 			{:else}
 				<!-- Error State -->
 				<div class="error-icon-wrapper">
@@ -139,11 +174,6 @@
 					</button>
 				</div>
 			{/if}
-		</div>
-
-		<!-- Footer -->
-		<div class="footer">
-			<p>Powered by <span class="brand">Flipopay</span></p>
 		</div>
 	</div>
 </main>
@@ -416,24 +446,6 @@
 		line-height: 1.6;
 	}
 
-	/* Footer */
-	.footer {
-		text-align: center;
-		margin-top: var(--spacing-lg);
-		padding-top: var(--spacing-lg);
-	}
-
-	.footer p {
-		font-size: 14px;
-		color: var(--color-text-tertiary);
-		margin: 0;
-	}
-
-	.brand {
-		font-weight: 700;
-		color: var(--color-primary);
-	}
-
 	/* Responsive */
 	@media (min-width: 640px) {
 		.action-buttons {
@@ -475,4 +487,27 @@
 			border: 1px solid #ddd;
 		}
 	}
+	.cancel-circle {
+	width: 80px;
+	height: 80px;
+	border-radius: 50%;
+	background: linear-gradient(135deg, #facc15 0%, #eab308 100%);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.title.cancel {
+	color: #eab308;
+}
+
+.status-badge.cancel {
+	background: rgba(234, 179, 8, 0.1);
+	color: #eab308;
+}
+
+.info-box.neutral {
+	background: rgba(234, 179, 8, 0.05);
+	border: 1px solid rgba(234, 179, 8, 0.2);
+}
 </style>
