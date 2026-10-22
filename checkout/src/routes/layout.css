@@ -9,6 +9,13 @@
 	--color-error: #df1b41;
 	--color-warning: #f5a623;
 
+	/* Gradients */
+	--gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+	--gradient-success: linear-gradient(135deg, #00d924 0%, #00a81d 100%);
+	--gradient-purple: linear-gradient(135deg, #635bff 0%, #4f46e5 100%);
+	--gradient-blue: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+	--gradient-warm: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+
 	/* Backgrounds */
 	--color-bg: #f6f9fc;
 	--color-card: #ffffff;
@@ -119,6 +126,51 @@ body {
 	}
 }
 
+@keyframes pulse {
+	0%,
+	100% {
+		opacity: 1;
+		transform: scale(1);
+	}
+	50% {
+		opacity: 0.9;
+		transform: scale(1.02);
+	}
+}
+
+@keyframes bounce {
+	0%,
+	100% {
+		transform: translateY(0);
+	}
+	50% {
+		transform: translateY(-4px);
+	}
+}
+
+@keyframes slideInFromLeft {
+	from {
+		opacity: 0;
+		transform: translateX(-20px);
+	}
+	to {
+		opacity: 1;
+		transform: translateX(0);
+	}
+}
+
+@keyframes gradientShift {
+	0% {
+		background-position: 0% 50%;
+	}
+	50% {
+		background-position: 100% 50%;
+	}
+	100% {
+		background-position: 0% 50%;
+	}
+}
+
 /* Utility Classes */
 .animate-slide-up {
 	animation: slideUp var(--transition-slow) ease-out;
@@ -130,6 +182,18 @@ body {
 
 .animate-scale-in {
 	animation: scaleIn var(--transition-base) ease-out;
+}
+
+.animate-pulse {
+	animation: pulse 2s ease-in-out infinite;
+}
+
+.animate-bounce {
+	animation: bounce 1s ease-in-out infinite;
+}
+
+.animate-slide-in-left {
+	animation: slideInFromLeft var(--transition-base) ease-out;
 }
 
 /* Custom Scrollbar */
