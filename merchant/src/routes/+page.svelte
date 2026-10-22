@@ -40,7 +40,7 @@
 		{
 			name: 'John Doe ',
 			email: 'arjun.sharma@gmail.com',
-			phone: '9876543210',
+			phone: '+919876543210',
 			addressLine1: '42 MG Road',
 			addressLine2: 'Indiranagar',
 			city: 'Bengaluru',
@@ -52,7 +52,7 @@
 		{
 			name: 'Jane Doe ',
 			email: 'priya.nair@outlook.com',
-			phone: '9042173493',
+			phone: '+919042173493',
 			addressLine1: '7 Anna Salai',
 			addressLine2: 'Near Central Station',
 			city: 'Chennai',
@@ -64,7 +64,7 @@
 		{
 			name: 'Joe Schmoe',
 			email: 'rahul.mehta@yahoo.com',
-			phone: '9123456789',
+			phone: '+919123456789',
 			addressLine1: '15 Linking Road',
 			addressLine2: 'Bandra West',
 			city: 'Mumbai',
@@ -261,7 +261,7 @@
 								name="phone"
 								type="tel"
 								class="form-input"
-								placeholder="9876543210"
+								placeholder="+919876543210"
 								bind:value={phone}
 								required
 							/>
